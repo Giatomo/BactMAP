@@ -10,15 +10,15 @@
 extr_SuperSeggerClist <- function(matfile, trim.orphans=TRUE, cellList=FALSE){
   if (!requireNamespace("R.matlab", quietly = TRUE)) {
     inp <- readline("Packages 'R.matlab' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){utils::install.packages("R.matlab")}else{stop("Canceled")}
+    if(inp %in% c("y","Y")){utils::install.packages("R.matlab")}else{stop("Canceled")}
   }
   if (!requireNamespace("igraph", quietly = TRUE)) {
     inp <- readline("Packages 'igraph' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){utils::install.packages("igraph")}else{stop("Canceled")}
+    if(inp %in% c("y","Y")){utils::install.packages("igraph")}else{stop("Canceled")}
   }
   if (!requireNamespace("ape", quietly = TRUE)) {
     inp <- readline("Packages 'ape' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){utils::install.packages("ape")}else{stop("Canceled")}
+    if(inp %in% c("y","Y")){utils::install.packages("ape")}else{stop("Canceled")}
   }
   clist <- R.matlab::readMat(matfile)
   datasegger <- as.data.frame(clist$data)
@@ -67,7 +67,7 @@ extr_SuperSeggerClist <- function(matfile, trim.orphans=TRUE, cellList=FALSE){
 plotTreeBasic <- function(phylo, extradata, yscalechange = FALSE, showClade = FALSE, layout = "rectangular", ydata, cellNumber, open.angle, linesize = 1, linecolor = "black", lines=TRUE, colors=FALSE){
   if (!requireNamespace("ggtree", quietly = TRUE)) {
     inp <- readline("Packages 'ggtree' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){
+    if(inp %in% c("y","Y")){
         if (!requireNamespace("BiocManager", quietly = TRUE))utils::install.packages("BiocManager")
       BiocManager::install("ggtree", version = "3.8")
     }
@@ -100,19 +100,19 @@ plotTreeBasic <- function(phylo, extradata, yscalechange = FALSE, showClade = FA
 
 getphylolist_SupSeg <- function(CLT, prep=FALSE){
   #if(prep==TRUE){
-   # CLT <- prepcellListtree(CLT)
+  # CLT <- prepcellListtree(CLT)
   #}
   phylolist <- list()
   fulldatlist <- list()
   z <- 0
   for(n in unique(CLT$root[!is.na(CLT$root)])){
-    onephyl <- CLT[CLT$root==n&!is.na(CLT$parent),]
+    onephyl <- CLT[CLT$root == n & !is.na(CLT$parent),]
     if(nrow(onephyl)>1){
       z <- z+1
       Ntip <- length(onephyl$cell[onephyl$cell%in%onephyl$parent!=T])
       if(Ntip>1){
-        onephyl$edge2[onephyl$cell%in%onephyl$parent!=T] <- c(1:Ntip)
-        onephyl$edge2[onephyl$cell%in%onephyl$parent==T] <- c((Ntip+2):(nrow(onephyl)+1))
+        onephyl$edge2[onephyl$cell %in% onephyl$parent!=T] <- c(1:Ntip)
+        onephyl$edge2[onephyl$cell %in% onephyl$parent==T] <- c((Ntip+2):(nrow(onephyl)+1))
         onephyl$edge1 <- lapply(onephyl$parent, function(x) onephyl$edge2[onephyl$cell==x])
         onephyl$edge1[is.na(onephyl$edge1==0)] <- Ntip+1
         onephyl$edge1 <- as.numeric(as.character(onephyl$edge1))
@@ -149,3 +149,85 @@ getphylolist_SupSeg <- function(CLT, prep=FALSE){
   }
   return(list(generation_lists = phylolist, generation_dataframes=fulldatlist, genframe = fulldatframe))
 }
+
+
+
+extract_celllist <- function(oufti_list) {
+  tibble(oufti_list$cellList[[2]]) %>% 
+    unnest(everything()) %>% 
+    rename(cell = 1) %>% 
+    rowid_to_column("frame") %>% 
+    rowwise() %>% 
+    mutate(cell = list(t(cell))) -> cellid
+    
+  tibble(oufti_list$cellList[[1]]) %>% 
+    unnest(everything()) %>%
+    rename(celldata = 1) %>% 
+    rowid_to_column("frame") %>% 
+    inner_join(cellid, by = c("frame" = "frame")) %>%
+    unnest_longer(c(celldata, cell)) %>%
+    unnest(celldata) %>%
+    unnest_wider(celldata) %>%
+    mutate(across(where(\(x) length(dim(x)) == 2 && dim(x)[2] == 1), \(x) c(x))) %>%
+    mutate(
+      child1 = descendants[,1],
+      child2 = descendants[,2]) %>%
+    select(-c(descendants,box)) -> celllist
+    
+    return (celllist)
+}
+
+extract_mesh <- function(celllist){
+celllist %>% 
+  rowwise() %>% 
+  mutate(mesh = list(as_tibble(mesh) %>% 
+      rename(x0 = 1, y0 = 2 , x1 = 3, y1 = 4) %>% 
+      mutate(
+        cell = cell,
+        frame = frame, 
+        num = 0:(nrow(mesh)-1)
+      )
+    )
+  ) %>%
+  select(mesh) %>%
+  unnest(mesh) %>% 
+  rowwise() %>% 
+  mutate(
+    xdist = x0 - x1,
+    ydist = y0 - y1, 
+    widths = polar_distance(xdist, ydist)) %>% 
+  group_by(cell, frame) %>% 
+  mutate(
+    max.width = max(widths),
+    xdistL0 = x0 - lag(x0, default = first(x0)),
+    ydistL0 = y0 - lag(y0, default = first(y0)), 
+    distL0 = polar_distance(xdistL0, ydistL0), 
+    angL0 = polar_angle(ydistL0, xdistL0), 
+    angd = polar_angle(ydist, xdist), 
+    anglength = pi - abs(angL0) - abs(angd), 
+    anglength =  replace(anglength, length(anglength), 0.5*pi - abs(angL0 - abs(angd))),
+    steplength = sin(anglength) * distL0,
+    steplength = replace(steplength, 1, 0)) -> meshes
+  # fill(angd, .direction = "down") %>%
+  # mutate(
+  #   anglength = if_else(is.na(anglength), (pi/2)-abs(angL0)-abs(angd), anglength),
+  #   steplength = if_else(is.na(steplength),  sin(anglength)*distL0, steplength),
+  #   length_to_step = cumsum(steplength, na.rm = TRUE)) -> meshes
+  
+  return(meshes)
+  
+  # TODO add this part (check if needed)
+  # if(z==max(meshline$num+1)){
+  #         angK <- polar_angle(xdist[z-1], ydist[z-1])
+  #         anglengthEnd <- (pi/2)-abs(angL0-abs(angK))
+  #         steplengthK <- sin(anglengthEnd)*distL0
+  #         meshline$steplength[z] <- steplengthK
+  #         meshline$length[z] <- sum(meshline$steplength[1:z])
+  #       }
+}
+
+
+
+
+
+

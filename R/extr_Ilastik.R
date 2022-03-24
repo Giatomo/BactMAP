@@ -7,7 +7,7 @@
 #'@description To be able to use this function, you need one directory with the Object Predictions (saved as TIFF) and Object Tables (saved as CSV).
 #'Save them with the names the software gives them ("*_Object Predictions.TIFF" and "_table.csv").
 #'
-getFilesIlastik <- function(directory,name_classes = c("attack", "inside"), smoothing = TRUE, mag = "No_PixelCorrection"){
+getFilesIlastik <- function(directory, name_classes = c("attack", "inside"), smoothing = TRUE, mag = "No_PixelCorrection"){
 
   #get the directory if missing.
   if(missing(directory)){
@@ -58,7 +58,7 @@ getFilesIlastik <- function(directory,name_classes = c("attack", "inside"), smoo
   #polygon conversion puts data from 0-->1 so correcting for the amount of pixels. + the image is flipped, so also flipping the Y axis.
   eachpol <- eachpol %>%
     dplyr::mutate(X = X*pixels,
-                    Y = ((Y*pixels)*-1)+pixels)
+                  Y = ((Y*pixels)*-1)+pixels)
 
   #average the x/y coordinates of the outlines to get one single point referring to it.
   av <- eachpol %>%
@@ -150,16 +150,16 @@ make_Axis <- function(oneCell){
   vD <- vD[vD$bp2==TRUE,] %>%
     select(.data$x1, .data$y1) %>%
     distinct() %>%
-    filter(.data$x1>quantile(.data$x1, c(0.25))) %>%
-    filter(.data$x1<quantile(.data$x1, c(0.75)))
-
+    filter(between(.data$x1, quantile(.data$x1, 0.25), quantile(.data$x1, 0.75)))
+    
   vDp <- data.frame(predict(smooth.spline(vD$x1, vD$y1), seq(min(oneCell$X_rot), max(oneCell$X_rot), by=0.4))) %>%
-    dplyr::mutate(cell=unique(oneCell$cell),
-                  frame= unique(oneCell$frame),
-                  class=unique(oneCell$class),
-                  dist = sqrt((.data$x-dplyr::lead(.data$x))^2+(.data$y-dplyr::lead(.data$y))^2),
-                  max.length=sum(.data$dist, na.rm=T))
+    dplyr::mutate(cell = unique(oneCell$cell),
+                  frame = unique(oneCell$frame),
+                  class = unique(oneCell$class),
+                  dist = polar_distance(.data$x - dplyr::lead(.data$x), .data$y-dplyr::lead(.data$y)),
+                  max.length = sum(.data$dist, na.rm=T))
   return(vDp)
 
 }
+                  
 

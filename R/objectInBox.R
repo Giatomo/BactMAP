@@ -15,14 +15,14 @@ objectInBox <- function(objectdata, meshdata, mag = "No_PixelCorrection"){
     dplyr::right_join(objectdata) %>%
     dplyr::mutate(obID = as.character(.data$obID)) %>%
     dplyr::group_by(.data$obID) %>%
-    dplyr::mutate(pip=sum(.data$pip, na.rm=T)) %>%
+    dplyr::mutate(pip = sum(.data$pip, na.rm=TRUE)) %>%
     dplyr::ungroup() %>%
     dplyr::filter(!is.na(.data$pip)) %>%
-    dplyr::filter(.data$pip>0) %>%
+    dplyr::filter(.data$pip > 0) %>%
     dplyr::group_by(.data$obID) %>%
-    dplyr::mutate(max.length = mean(.data$max.length, na.rm=T),
-                  max.width = mean(.data$max.width, na.rm=T),
-                  cell = mean(.data$cell, na.rm=T)
+    dplyr::mutate(max.length = mean(.data$max.length, na.rm=TRUE),
+                  max.width = mean(.data$max.width, na.rm=TRUE),
+                  cell = mean(.data$cell, na.rm=TRUE)
                   ) %>%
     dplyr::ungroup() %>%
     dplyr::select(-.data$l, -.data$d) %>%

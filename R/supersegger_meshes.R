@@ -145,11 +145,11 @@ extr_SuperSeggerCells <- function(loc, frames, mag, timelapse=FALSE, startframe=
       message("Installing 'raster' dependency 'rgeos'..")
       utils::install.packages("rgeos")
     }
-    if(inp=="y"|inp=="Y"){utils::install.packages(c("R.matlab", "raster"))}else{stop("Canceled")}
+    if(inp %in% c("y","Y")){utils::install.packages(c("R.matlab", "raster"))}else{stop("Canceled")}
   }
   if (!requireNamespace("raster", quietly = TRUE)) {
     inp <- readline("Package 'raster' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){utils::install.packages("raster")}else{stop("Canceled")}
+    if(inp %in% c("y","Y")){utils::install.packages("raster")}else{stop("Canceled")}
   }
   if(!requireNamespace("rgeos", quietly=TRUE)){
     message("Installing 'rgeos'..")

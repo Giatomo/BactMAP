@@ -42,15 +42,15 @@ showCurrentPalettes <- function(){
   if (!requireNamespace("gridExtra", quietly = TRUE)) {
     if (!requireNamespace("mvtnorm", quietly = TRUE)) {
       inp <- readline("Package 'gridExtra' and 'mvtnorm' needed for this function to work. Press 'y' to install them, or any other key to cancel.")
-      if(inp=="y"|inp=="Y"){utils::install.packages(c("gridExtra", "mvtnorm"))}else{stop("Canceled")}
+      if(inp %in% c("y","Y")){utils::install.packages(c("gridExtra", "mvtnorm"))}else{stop("Canceled")}
     }
     else{inp <- readline("Package 'gridExtra' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){utils::install.packages("gridExtra")}else{stop("Canceled")}
+    if(inp %in% c("y","Y")){utils::install.packages("gridExtra")}else{stop("Canceled")}
     }
   }
   if(!requireNamespace("mvtnorm", quietly = TRUE)) {
     inp <- readline("Package 'mvtnorm' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){utils::install.packages("mvtnorm")}else{stop("Canceled")}
+    if(inp %in% c("y","Y")){utils::install.packages("mvtnorm")}else{stop("Canceled")}
   }
   plotlist <- list()
   namelist <- names(colchoice)

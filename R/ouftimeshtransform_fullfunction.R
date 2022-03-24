@@ -74,9 +74,8 @@ sprOuftimesh <- function(cellList){
       dat$y1 <- as.numeric(as.character(dat$y1))
       xdist <- dat$x0 - dat$x1
       ydist <- dat$y0 - dat$y1
-      widths <- sqrt(xdist^2 + ydist^2)
-      max_width <- max(widths)
-      dat$max.width <- max_width
+      widths <- polar_distance(xdist, ydist) 
+      dat$max.width <- max(widths)
       dat$frame <- mesh$frame[n]
       dat$cell <- mesh$cell[n]
       dat$max.length <- mesh$max.length[n]

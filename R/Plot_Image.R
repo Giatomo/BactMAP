@@ -6,14 +6,14 @@ extr_OriginalStack <- function(picloc){
   if (!requireNamespace("tiff", quietly = TRUE)) {
     if(!requireNamespace("raster", quietly = TRUE)){
       inp <- readline("Package 'tiff' and 'raster' needed for this function to work. Press 'y' to install them, or any other key to cancel.")
-      if(inp=="y"|inp=="Y"){utils::install.packages(c("tiff", "raster"))}else{stop("Canceled")}
+      if(inp %in% c("y","Y")){utils::install.packages(c("tiff", "raster"))}else{stop("Canceled")}
     }else{
       inp <- readline("Package 'tiff' needed for this function to work. Press 'y' to install it, or any other key to cancel.")
-      if(inp=="y"|inp=="Y"){utils::install.packages("tiff")}else{stop("Canceled")}}
+      if(inp %in% c("y","Y")){utils::install.packages("tiff")}else{stop("Canceled")}}
   }
   if(!requireNamespace("raster", quietly = TRUE)){
     inp <- readline("Package 'raster' needed for this function to work. Press 'y' to install it, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){utils::install.packages("raster")}else{stop("Canceled")}
+    if(inp %in% c("y","Y")){utils::install.packages("raster")}else{stop("Canceled")}
   }
   suppressWarnings(im <- tiff::readTIFF(picloc, all=T)) #if you want the best resolution, it needs to be a .tiff file
   im <- lapply(im, function(x) raster::raster(x))
@@ -59,7 +59,7 @@ plotCellsTime <- function(celdat,
   if(movie==TRUE){
     if(!requireNamespace("gganimate", quietly = TRUE)){
       inp <- readline("Package 'gganimate' needed to make an animation. Press 'y' to install it, or any other key to cancel.")
-      if(inp=="y"|inp=="Y"){utils::install.packages("gganimate")}else{stop("Canceled")}
+      if(inp %in% c("y","Y")){utils::install.packages("gganimate")}else{stop("Canceled")}
     }
   }
   if(missing(minf)){

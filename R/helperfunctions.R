@@ -6,6 +6,8 @@
 
 #merge data functions
 
+`%!in%` <- Negate(`%in%`)
+
 #' @export
 #'
 #' @title Function to get a dataframe per cell out of your mesh, spots, object or tiff dataset.
@@ -127,11 +129,11 @@ getPixels2um <- function(){
 spotsInBox <- function(spotdata, meshdata, Xs = "x", Ys = "y", Xm = "X", Ym = "Y", meshInOutput=FALSE){
   if (!requireNamespace("shotGroups", quietly = TRUE)) {
     inp <- readline("Package 'shotGroups' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){utils::install.packages("shotGroups")}else{stop("Canceled")}
+    if(inp %in% c("y","Y")){utils::install.packages("shotGroups")}else{stop("Canceled")}
   }
   if (!requireNamespace("sp", quietly = TRUE)) {
     inp <- readline("Package 'sp' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){utils::install.packages("sp")}else{stop("Canceled")}
+    if(inp %in% c("y","Y")){utils::install.packages("sp")}else{stop("Canceled")}
   }
 
    #rewrite colnames if not the same as suggested
@@ -223,7 +225,8 @@ getSpotsInBox <- function(meshp, spotdatap, u, a, returnMESH=FALSE){
   d1 <- data.frame(x = abs(distances$x-distances$x[1]), y =abs(distances$y-distances$y[1]))
   d1$pointn <- 1:4
   d1 <- d1[-1,]
-  d1$dist <- sqrt(d1$x^2+d1$y^2)
+  d1$dist <- polar_distance(d1$x, d1$y)
+
 
   un <- data.frame(table(round(d1$dist, 5)))
 
@@ -245,14 +248,16 @@ getSpotsInBox <- function(meshp, spotdatap, u, a, returnMESH=FALSE){
   Y_cor <- meshp$Y-mp[2]
   angle <- (-box$angle)*pi/180 #angle to lay cell flat on x axis
 
-  meshp$X_rot <- X_cor * cos(angle) - Y_cor * sin(angle)
-  meshp$Y_rot <- X_cor * sin(angle) + Y_cor * cos(angle) #rotate cell
+  rotations <- rotate(X_cor, Y_cor, angle)
+  meshp$X_rot <- rotations$x
+  meshp$Y_rot <- rotations$y
 
   if(nrow(pinps)>0){ #rotate spot/object points
     Lc <- pinps$x-mp[1]
     Dc <- pinps$y-mp[2]
-    pinps$l <- -(Lc*cos(angle)-Dc*sin(angle))
-    pinps$d <- -(Lc*sin(angle) +Dc*cos(angle))
+    rotations <- rotate(Lc, Dc, angle)
+    pinps$l <- -rotations$x
+    pinps$d <- -rotations$y
     pinps$max.width <- unique(meshp$max.width)
     if("max_length"%in%colnames(meshp)){pinps$max.length <- unique(meshp$max_length)
     mesh$max.length <- mesh$max_length
@@ -283,17 +288,18 @@ getSpotsInBox <- function(meshp, spotdatap, u, a, returnMESH=FALSE){
 getpointsaround <- function(datsaround, angle){
   xlist <- c()
   ylist <- c()
-  xlist[1] <- (datsaround$X_corRM)*cos(angle) - (datsaround$Y_corRM)*sin(angle)
-  xlist[2]<- (datsaround$X_corRM)*cos(angle) - (datsaround$Y_corRMa)*sin(angle)
-  xlist[3] <- (datsaround$X_corRMa)*cos(angle) - (datsaround$Y_corRMa)*sin(angle)
-  xlist[4] <- (datsaround$X_corRMa)*cos(angle) - (datsaround$Y_corRM)*sin(angle)
+  
+  xlist[1] <- rotate(datsaround$X_corRM, datsaround$Y_corRM, angle)$x
+  xlist[2] <- rotate(datsaround$X_corRM, datsaround$Y_corRMa, angle)$x
+  xlist[3] <- rotate(datsaround$X_corRMa, datsaround$Y_corRMa, angle)$x
+  xlist[4] <- rotate(datsaround$X_corRMa, datsaround$Y_corRM, angle)$x
+  
+  ylist[1] <- rotate(datsaround$X_corRM, datsaround$Y_corRM, angle)$y
+  ylist[2] <- rotate(datsaround$X_corRM, datsaround$Y_corRMa, angle)$y
+  ylist[3] <- rotate(datsaround$X_corRMa, datsaround$Y_corRMa, angle)$y
+  ylist[4] <- rotate(datsaround$X_corRMa, datsaround$Y_corRM, angle)$y
 
-  ylist[1] <- (datsaround$X_corRM)*sin(angle) + (datsaround$Y_corRM)*cos(angle)
-  ylist[2] <- (datsaround$X_corRM)*sin(angle) + (datsaround$Y_corRMa)*cos(angle)
-  ylist[3] <- (datsaround$X_corRMa)*sin(angle) + (datsaround$Y_corRMa)*cos(angle)
-  ylist[4] <- (datsaround$X_corRMa)*sin(angle) + (datsaround$Y_corRM)*cos(angle)
-
-  datforpoint <- data.frame(xt = xlist, yt=ylist, pointN=datsaround$pointN)
+  datforpoint <- data.frame(xt = xlist, yt = ylist, pointN = datsaround$pointN)
   return(datforpoint)
 }
 
@@ -301,8 +307,9 @@ turnraws <- function(rawdatafile, i, n, mp, angle){
   rawr <- rawdatafile[rawdatafile$frame==i&rawdatafile$cell==n,]
   X_corR <- rawr$x - mp[1]
   Y_corR <- rawr$y - mp[2]
-  rawr$X_rot <- X_corR * cos(angle) - Y_corR * sin(angle)
-  rawr$Y_rot <- X_corR * sin(angle) + Y_corR * cos(angle)
+  rotations <- rotate(X_corR, Y_corR, angle)
+  rawr$X_rot <- rotations$x
+  rawr$Y_rot <- rotations$y
   rawr$pointN <- c(1:nrow(rawr))
   datsaround <- data.frame(X_corRM = X_corR - 0.5, X_corRMa = X_corR + 0.5, Y_corRM = Y_corR - 0.5, Y_corRMa = Y_corR + 0.5, pointN = rawr$pointN)
   datsaround <- lapply(1:nrow(datsaround), function(x) getpointsaround(datsaround[x,], angle))
@@ -315,11 +322,11 @@ turncell <- function(MESHp, u, rawdatafile, a, n, i, ars){
   if (!requireNamespace("shotGroups", quietly = TRUE)) {
 
     inp <- readline("Package 'shotGroups' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){utils::install.packages("shotGroups")}else{stop("Canceled")}
+    if(inp %in% c("y","Y")){utils::install.packages("shotGroups")}else{stop("Canceled")}
   }
   if (!requireNamespace("sp", quietly = TRUE)) {
     inp <- readline("Package 'sp' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){utils::install.packages("sp")}else{stop("Canceled")}
+    if(inp %in% c("y","Y")){utils::install.packages("sp")}else{stop("Canceled")}
   }
   box <- suppressWarnings(shotGroups::getMinBBox(data.frame(x= MESHp$X, y=MESHp$Y))) #bounding box of cell
   lengthwidth <- c(box$width, box$height)
@@ -339,7 +346,8 @@ turncell <- function(MESHp, u, rawdatafile, a, n, i, ars){
   d1 <- data.frame(x = abs(distances$x-distances$x[1]), y =abs(distances$y-distances$y[1]))
   d1$pointn <- 1:4
   d1 <- d1[-1,]
-  d1$dist <- sqrt(d1$x^2+d1$y^2)
+  d1$dist <- polar_distance(d1$x, d1$y)
+
 
   un <- data.frame(table(round(d1$dist, 5)))
 
@@ -364,11 +372,13 @@ turncell <- function(MESHp, u, rawdatafile, a, n, i, ars){
   MESHp$angle <- angle
   MESHp$Xmid <- mp[1]
   MESHp$Ymid <- mp[2]
-  MESHp$X_rot <- X_cor * cos(angle) - Y_cor * sin(angle)
-  MESHp$Y_rot <- X_cor * sin(angle) + Y_cor * cos(angle) #rotate cell
+  rotations <- rotate(X_cor, Y_cor, angle)
+  MESHp$X_rot <- rotations$x
+  MESHp$Y_rot <- rotations$y
   if(MESHp$Y_rot[[1]]>0){
-    MESHp$Y_rot <-  MESHp$X_rot * sin(pi) + MESHp$Y_rot * cos(pi)
-    MESHp$X_rot <- MESHp$X_rot * cos(pi) - MESHp$Y_rot * sin(pi)
+    rotations <- rotate(MESHp$X_rot, MESHp$Y_rot, pi)
+    MESHp$Y_rot <- rotations$y
+    MESHp$X_rot <- rotations$x
     MESHp$angle <- MESHp$angle - pi
   }
 
@@ -517,7 +527,7 @@ spotMR <- function(dat){
 centrefun <- function(dat, xie="ob_x", yie="ob_y"){
   if (!requireNamespace("shotGroups", quietly = TRUE)) {
     inp <- readline("Package 'shotGroups' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){utils::install.packages("shotGroups")}else{stop("Canceled")}
+    if(inp %in% c("y","Y")){utils::install.packages("shotGroups")}else{stop("Canceled")}
   }
   dat <- dat[!is.na(dat$ob_x),]
   dat$centre_x <- NA
@@ -756,4 +766,91 @@ turnEach <- function(partCD, listPol){
   return(partCD)
 
 }
+
+polar_distance <- function(x,y) {
+  return(sqrt(x^2 + y^2))
+}
+
+polar_angle <- function(x,y) {
+  return(atan(x/y))
+}
+
+rotate <- function(x, y, theta, type = "rad"){
+  theta <- switch(type,
+    "rad" = theta,
+    "deg" = (pi/180) * theta,
+    "hour" = 0.2618 * theta)
+  new_x = x * cos(theta) - y * sin(theta)
+  new_y = x * sin(theta) + y * cos(theta)
+  return(data.frame(x = new_x, y = new_y))
+}
+
+
+retrive_phylogenies <- function(celllist) {
+  celllist %>%
+    mutate(parent = tail(ancestors, n = 1)) %>% 
+    filter(!is.na(ancestors)) %>% tibble()
+    mutate(
+      parent = if_else(is.na(tail(as.numeric(ancestors), n = 1)), 0, tail(as.numeric(ancestors), n = 1)),
+      child1 = as.numeric(descendants[1]),
+      child2 = as.numeric(descendants[2]),
+      root = 0) %>%
+    group_by(cell) %>%
+    mutate(death = max(frame)) %>%
+    rowwise() %>%
+    mutate(edgelength = death - birthframe) %>%
+    ungroup() -> celllist
+    
+    phylolist <- celllist %>% filter(death == birthframe) %>% getphylolist_SupSeg()
+    
+    if (isFALSE(ape::is.rooted.phylo(phylolist$generation_lists))) {
+      phylolist <- phylolist %>% filter(is.data.frame(generation_dataframes))
+      }
+    
+    if (length(cellList1$spots) > 1) {
+        message("Saving the relative spot localizations per phylogeny...")
+        if (is.data.frame(phylolist$generation_dataframes)) {
+          ph <- phylolist$generation_dataframes[,c("node", "cell", "frame", "parent", "child1", "child2", "death", "birthframe", "edgelength", "root", "nodelabel")]
+          phylolist <- merge(ph, spot_mesh[,,c("cell","frame", "max.length", "max.width", "spot", "totalspot", "Lmid", "pole1", "pole2", "Dum") ], all=T)
+        }
+        else {
+          phlist_allcells <- lapply(phylolist$generation_dataframes, function(x) x[,c("node", "cell", "frame", "parent", "child1", "child2", "death", "birthframe", "edgelength", "root", "nodelabel")])
+          MRTlist <- lapply(phlist_allcells, function(x) merge(x, spot_mesh[,c("cell","frame", "max.length", "max.width", "spot", "totalspot", "Lmid", "pole1", "pole2", "Dum")]), all=T)
+          phylolist$spot_relative_list <- MRTlist
+        }
+      }
+        message("Saving cell outlines per phylogeny...")
+    if(is.data.frame(phylolist$generation_dataframes)==FALSE){
+      Mlist <- lapply(phylolist$generation_dataframes, function(x) merge(x[,c("node", "cell", "frame", "parent", "child1", "child2", "death", "birthframe", "edgelength", "root", "nodelabel")], Mesh))
+    }
+    if(is.data.frame(phylolist$generation_dataframes)==TRUE){
+      Mlist <- merge(phylolist$generation_dataframes[,c("node", "cell", "frame", "parent", "child1", "child2", "death", "birthframe", "edgelength", "root", "nodelabel")], Mesh)
+    }
+    phylolist$meshdata <- Mlist
+    return(outlist)
+}
+
+
+tibble(celllist) %>%
+  rowwise() %>%
+  mutate(
+    root = 0,
+    child1 = descendants[1],
+    child2 = descendants[2], 
+    parent = if_else(length(ancestors) > 0, ancestors[1], 0)) %>% 
+  select(-c(mesh, model, ancestors, descendants, divisions, box)) %>% 
+  mutate(across(everything(), as.numeric)) %>%
+  group_by(cell) %>%
+  mutate(death = max(frame)) %>%
+  ungroup() %>%
+  mutate(edgelength = death - birthframe) 
+  meshes %>% mutate(xdistL0 = x0 - lag(x0), ydistL0 = y0 - lag(y0), distL0 = polar_distance(xdistL0, ydistL0), angL0 = polar_angle(ydistL0, xdistL0), angd = polar_angle(ydist, xdist), anglength = pi-abs(angL0)-abs(angd), st 
+    eplength = sin(anglength)*distL0, length = sum(steplength, na.rm = TRUE))
+
+cleaned %>% filter(frame == death) %>% getphylolist_SupSeg() -> test
+  
+is.numeric(celllist$birthframe)
+
+
+
 

@@ -8,49 +8,43 @@
 
 ##MicrobeJ
 
+
 extr_MicrobeJMESH <- function(dataloc, sep=",", extracols){
   if (!requireNamespace("shotGroups", quietly = TRUE)) {
     inp <- readline("Package 'shotGroups' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){utils::install.packages("shotGroups")}else{stop("Canceled")}
+    if (inp %in% c("y", "Y")) { utils::install.packages("shotGroups") } else { stop("Canceled") }
   }
-  MESH <- utils::read.csv(dataloc, header=T, sep=sep)
-  meshL <- list()
-  meshL$cellList <- MESH
+  MESH <- utils::read.csv(dataloc, header = TRUE, sep=sep)
+  meshL <- list(cellList = MESH)
+  # meshL$cellList <- MESH
 
-  if("Y"%in%colnames(MESH)==FALSE){
-    if("COORD.y"%in%colnames(MESH)==TRUE){
-      if("X"%in%colnames(MESH)){
-        MESH$X <- NULL
-      }
-      MESH <- dplyr::rename(MESH, X = .data$COORD.x, Y=.data$COORD.y)
-    }else{
-      stop("Cannot find X/Y coordinates. BactMAP recognizes the coordinate names 'COORD.x' and 'COORD.y', as well as the names 'X' and 'Y'. Please check your contour CSV and change the names of the coordinate variables accordingly")
+  if("Y" %!in% colnames(MESH)){
+    if("COORD.y" %!in% colnames(MESH)){
+       stop("Cannot find X/Y coordinates. BactMAP recognizes the coordinate names 'COORD.x' and 'COORD.y', as well as the names 'X' and 'Y'. Please check your contour CSV and change the names of the coordinate variables accordingly")  
     }
+    if("X" %in% colnames(MESH)){
+      MESH$X <- NULL
+    }
+    # Not sure about that function usage ?
+    MESH <- dplyr::rename(MESH, X = .data$COORD.x, Y=.data$COORD.y)
   }
-
-
-  if("NAME.id"%in%colnames(MESH)){
-    MESH <- MESH %>%
+  
+  if("NAME" %in% colnames(MESH)){
+    MESH <- MESH %>% dplyr::rename(NAME.id = .data$NAME)
+  }
+  if("NAME.id" %!in% colnames(MESH)){
+    stop("Can not find the cell indicator. Please check your MicrobeJ CSV and make sure to save it including the column 'NAME' or 'NAME.id'")
+  }
+  MESH <- MESH %>%
       dplyr::group_by(.data$X, .data$Y, .data$POSITION) %>%
       dplyr::mutate(NAME.id = dplyr::nth(.data$NAME.id, 1)) %>%
       dplyr::ungroup()
-    IDlist <- data.frame(NAME.id = unique(MESH$NAME.id), cell = c(1:length(unique(MESH$NAME.id))))
-  }else{
-    if("NAME"%in%colnames(MESH)){
-      MESH <- MESH %>%
-        dplyr::group_by(.data$X, .data$Y, .data$POSITION) %>%
-        dplyr::mutate(NAME = dplyr::nth(.data$NAME, 1)) %>%
-        dplyr::ungroup() %>%
-        dplyr::rename(NAME.id = .data$NAME)
-      IDlist <- data.frame(NAME.id = unique(MESH$NAME.id), cell = c(1:length(unique(MESH$NAME.id))))
-    }else{
-      stop("Can not find the cell indicator. Please check your MicrobeJ CSV and make sure to save it including the column 'NAME' or 'NAME.id'")
-    }
-  }
-
-
-  MESH <- dplyr::left_join(MESH, IDlist)
-  MESH <- dplyr::rename(MESH, frame = .data$POSITION, cellID = .data$NAME.id)
+      
+  IDlist <- data.frame(NAME.id = unique(MESH$NAME.id), cell = c(1:length(unique(MESH$NAME.id))))
+  
+  MESH <- MESH %>% 
+    dplyr::left_join(IDlist) %>%
+    dplyr::rename(frame = .data$POSITION, cellID = .data$NAME.id)
 
   if(!missing(extracols)){
     MESHi <- MESH %>%
@@ -76,7 +70,7 @@ extr_MicrobeJMESH <- function(dataloc, sep=",", extracols){
 
 
 extr_MicrobeJSpots <- function(spotloc ,mag, sep=","){
-  SPOTS <- utils::read.csv(spotloc, header=F, sep=sep)
+  SPOTS <- utils::read.csv(spotloc, header=FALSE, sep=sep)
   colnamesspot <- SPOTS[1,]
   colnamesspot <- colnamesspot[!is.na(colnamesspot)]
   if(is.na(unique(SPOTS[,ncol(SPOTS)]))){
@@ -97,58 +91,46 @@ extr_MicrobeJSpots <- function(spotloc ,mag, sep=","){
   }
   colnames(SPOTS) <- colnamesspot[1:ncol(SPOTS)]
 
-  spotL <- list()
-  spotL$cellList <- SPOTS
-  if("LOCATION.x"%in%colnames(SPOTS)){
-    SPOTS$x <- as.numeric(as.character(SPOTS$LOCATION.x))/unlist(get(magnificationList, envir=magEnv)[mag])
-    SPOTS$y <- as.numeric(as.character(SPOTS$LOCATION.y))/unlist(get(magnificationList, envir=magEnv)[mag])
-  }else{
-    if("LOCATION"%in%colnames(SPOTS)){
-      SPOTS$x <- as.numeric(t(data.frame(strsplit(stringr::str_sub(SPOTS$LOCATION,2,-2),";"))[1,]))
-      SPOTS$y <- as.numeric(t(data.frame(strsplit(stringr::str_sub(SPOTS$LOCATION,2,-2),";"))[2,]))
-    }else{
-      if("COORD.x"%in%colnames(SPOTS)){
-        SPOTS$x <- as.numeric(as.character(SPOTS$COORD.x))/unlist(get(magnificationList, envir=magEnv)[mag])
-        SPOTS$y <- as.numeric(as.character(SPOTS$COORD.y))/unlist(get(magnificationList, envir=magEnv)[mag])
-      }else{
-        if("COORD"%in%colnames(SPOTS)){
-          SPOTS$x <- as.numeric(t(data.frame(strsplit(stringr::str_sub(SPOTS$COORD,2,-2),";"))[1,]))
-          SPOTS$y <- as.numeric(t(data.frame(strsplit(stringr::str_sub(SPOTS$COORD,2,-2),";"))[2,]))
-        }else{
-          stop("X/Y positions of Maxima not found. Make sure to include the column 'LOCATION', 'COORD', or the colums 'LOCATION.x' and 'LOCATION.y' or 'COORD.x' and 'COORD.y' in your MicrobeJ CSV file")
-        }
-      }
-
-    }
+  spotL <- list(cellList = SPOTS)
+  
+  
+  valid_location_colnames <- c("LOCATION.x", "LOCATION", "COORD.x", "COORD")
+  if (all(valid_location_colnames %!in% colnames(SPOTS))){
+    stop("X/Y positions of Maxima not found. Make sure to include the column 'LOCATION', 'COORD', or the colums 'LOCATION.x' and 'LOCATION.y' or 'COORD.x' and 'COORD.y' in your MicrobeJ CSV file")
   }
+  magnification <- unlist(get(magnificationList, envir=magEnv)[mag])
+  
+  SPOTS$x <- switch(valid_location_colnames[which(valid_location_colnames %in% colnames(SPOTS))[1]],
+    "LOCATION.x" = as.numeric(as.character(SPOTS$LOCATION.x))/magnification,
+    "LOCATION" = as.numeric(t(data.frame(strsplit(stringr::str_sub(SPOTS$LOCATION,2,-2),";"))[1,])),
+    "COORD.x"= as.numeric(as.character(SPOTS$COORD.x))/magnification,
+    "COORD" = as.numeric(t(data.frame(strsplit(stringr::str_sub(SPOTS$COORD,2,-2),";"))[1,])))
+  
+  SPOTS$y <- switch(valid_location_colnames[which(valid_location_colnames %in% colnames(SPOTS))[1]],
+    "LOCATION.x" = as.numeric(as.character(SPOTS$LOCATION.y))/magnification,
+    "LOCATION" = as.numeric(t(data.frame(strsplit(stringr::str_sub(SPOTS$LOCATION,2,-2),";"))[2,])),
+    "COORD.x"= as.numeric(as.character(SPOTS$COORD.y))/magnification,
+    "COORD" = as.numeric(t(data.frame(strsplit(stringr::str_sub(SPOTS$COORD,2,-2),";"))[2,])))
 
-  if("PARENT.id"%in%colnames(SPOTS)){
-    SPOTS$cellID <- SPOTS$PARENT.id
-  }else{
-    if("PARENT"%in%colnames(SPOTS)){
-      SPOTS$cellID <- SPOTS$PARENT
-    }
-   # else(
-     # stop("Column 'PARENT' or 'PARENT.id' not found. Cannot identify the cell. Please include the column 'PARENT' or 'PARENT.id' in the MicrobeJ CSV output")
-  #  )
-  }
+ valid_parent_colnames <- c("PARENT.id", "PARENT")
+  # if (all(valid_parent_colnames %!in% colnames(SPOTS))){
+  #   stop("Column 'PARENT' or 'PARENT.id' not found. Cannot identify the cell. Please include the column 'PARENT' or 'PARENT.id' in the MicrobeJ CSV output")
+  # }
 
-  if("POSITION.slice"%in%colnames(SPOTS)){
-    SPOTS$frame <- SPOTS$POSITION.slice
-  }else{
-    if("POSITION"%in%colnames(SPOTS)){
-      SPOTS$frame <- SPOTS$POSITION
-    }else{
-      stop("Column 'POSITION' or 'POSITION.slice' not found. Cannot indicate frame number. Please include the column 'POSITION' or 'POSITION.slice' in your MicrobeJ CSV output.")
-    }
-  }
-  if("cellID"%in%SPOTS){
-    SPOTS <- SPOTS[,c("x", "y", "cellID", "frame")]
-  }else{
-    SPOTS <- SPOTS[,c("x", "y", "frame")]
-  }
+  SPOTS$cellID <- switch(valid_parent_colnames[which(valid_parent_colnames %in% colnames(SPOTS))[1]],
+        "PARENT.id" = SPOTS$PARENT.id,
+        "PARENT" = SPOTS$PARENT,
+        stop("Column 'PARENT' or 'PARENT.id' not found. Cannot identify the cell. Please include the column 'PARENT' or 'PARENT.id' in the MicrobeJ CSV output"))
 
-  spotL$spotList <- SPOTS
+
+  valid_position_colnames <- c("POSITION.slice", "POSITION.")
+  SPOTS$frame <- switch(valid_parent_colnames[which(valid_parent_colnames %in% colnames(SPOTS))[1]],
+    "POSITION.slice" =  SPOTS$POSITION.slice,
+    "POSITION" =  SPOTS$frame,
+    stop("Column 'POSITION' or 'POSITION.slice' not found. Cannot indicate frame number. Please include the column 'POSITION' or 'POSITION.slice' in your MicrobeJ CSV output."))
+
+  spotL$spotList  <- dplyr::if_else("cellID" %in% SPOTS, SPOTS[,c("x", "y", "cellID", "frame")],  SPOTS[,c("x", "y", "frame")])        
+
   return(spotL)
 }
 
@@ -163,17 +145,21 @@ extr_MicrobeJ <- function(dataloc,
                           magcor = c("dataloc", "spotloc", "objectloc"),
                           extracols
                           ){
-  if(mag=="No_PixelCorrection"&"dataloc"%in%magcor&"spotloc"%in%magcor&"objectloc"%in%magcor){
+                            
+  if(!missing(mag)){
+    magnification <- unlist(get(magnificationList,envir=magEnv)[mag])
+  }
+  if(mag == "No_PixelCorrection" & all(c("dataloc","spotloc","objectloc") %in% magcor)){
     warning("Not converting pixels to micron for any dataset. If you are not sure if you need to correct pixels to micron, check the values of the x/y coordinaties (COORD.x/y and POSITION.x/y) in your MicrobeJ CSVs.")
     magd <- mag
     mago <- mag
     mags <- mag
   }
-  if(missing(mag)!=T&is.numeric(unlist(get(magnificationList,envir=magEnv)[mag]))==FALSE){
+  if(!is.numeric(magnification)){
     stop("Magnification conversion factor not recognized. Please use addPixels2um('pixelName', pixelsize) to add your conversion factor")
   }
-  if(mag!="No_PixelCorrection"){
-    if("dataloc"%in%magcor){
+  if(mag != "No_PixelCorrection"){
+    if("dataloc" %in% magcor){
       magd <- mag
       message(paste("Using pixel to micron conversion factor", magd, "to convert cell contour pixel coordinates to microns."))
     }else{
@@ -237,7 +223,7 @@ extr_MicrobeJ <- function(dataloc,
       outlist$spotframe <- SPOTS
     }
   }
-  if(missing(objectloc)!=T){
+  if(!missing(objectloc)){
     if(is.list(objectloc)){
       O <- lapply(objectloc, function(x) extr_MicrobeJMESH(x, sepobj))
       objectsout <- list()
@@ -499,7 +485,7 @@ spotrExtractSpotsObjectJ <- function(SF){
 extr_Meshes <- function(dataloc, sep=",", turn=TRUE, mag, cellList=FALSE){
   if (!requireNamespace("shotGroups", quietly = TRUE)) {
     inp <- readline("Package 'shotGroups' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp=="y"|inp=="Y"){utils::install.packages("shotGroups")}else{stop("Canceled")}
+    if(inp %in% c("y","Y")){utils::install.packages("shotGroups")}else{stop("Canceled")}
   }
   if(substr(dataloc, nchar(dataloc)-3, nchar(dataloc))==".txt"){
     MESH <- utils::read.table(dataloc, header=T, sep=sep)
