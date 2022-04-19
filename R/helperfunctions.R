@@ -1,10 +1,10 @@
-##Renske van Raaphorst
-##7/14/2017
+## Renske van Raaphorst
+## 7/14/2017
 
-##Helperfunctions: functions necessary to make other functions working properly.
-##other package dependencies:
+## Helperfunctions: functions necessary to make other functions working properly.
+## other package dependencies:
 
-#merge data functions
+# merge data functions
 
 `%!in%` <- Negate(`%in%`)
 
@@ -26,50 +26,55 @@
 #'
 #' @examples
 #' \dontrun{
-#' df <- data.frame("cell"= c(rep(1, 5), rep(2,5)), "frame"=rep(1, 10), "channel"="GFP", "intensity"=c(1,3,4,5,6,1,2,7,3,10))
+#' df <- data.frame("cell" = c(rep(1, 5), rep(2, 5)), "frame" = rep(1, 10), "channel" = "GFP", "intensity" = c(1, 3, 4, 5, 6, 1, 2, 7, 3, 10))
 #'
 #' onePerCell(df)
 #' }
-onePerCell <- function(inputframe, by=c("cell","frame")){
+onePerCell <- function(inputframe, by = c("cell", "frame")) {
 
-  #remove columns with x/y coordinates
+  # remove columns with x/y coordinates
   cols <- colnames(inputframe)
-  cols <- cols[!cols%in%c("X",
-                          "Y",
-                          "ob_out_x",
-                          "ob_out_y",
-                          "num",
-                          "obpath",
-                          "X_rot",
-                          "Y_rot",
-                          "Xrot_micron",
-                          "Yrot_micron"
+  cols <- cols[!cols %in% c(
+    "X",
+    "Y",
+    "ob_out_x",
+    "ob_out_y",
+    "num",
+    "obpath",
+    "X_rot",
+    "Y_rot",
+    "Xrot_micron",
+    "Yrot_micron"
   )]
 
   inputframe <- inputframe %>% dplyr::select(cols)
 
-  for(n in by){
-    inputframe <- inputframe %>% dplyr::group_by(.data[[n]], add=TRUE)
+  for (n in by) {
+    inputframe <- inputframe %>% dplyr::group_by(.data[[n]], add = TRUE)
   }
 
 
 
-  #summarize
+  # summarize
   inputframe_num <- inputframe %>%
-    dplyr::summarize_if(is.double, list(mean = mean, sd=stats::sd)) %>%
+    dplyr::summarize_if(is.double, list(mean = mean, sd = stats::sd)) %>%
     dplyr::ungroup()
-  inputframe_num <- inputframe_num[,colSums(inputframe_num!=0)>0]
+  inputframe_num <- inputframe_num[, colSums(inputframe_num != 0) > 0]
 
   inputframe_char <- inputframe %>%
     dplyr::mutate_if(is.factor, as.character) %>%
     dplyr::summarize_if(is.character, dplyr::funs(dplyr::first))
   inputframe_out <- dplyr::full_join(inputframe_num, inputframe_char) %>% dplyr::ungroup()
 
-  #check for ambiguous stuff
-  chcar <- inputframe_char %>% dplyr::ungroup() %>% dplyr::select_if(is.character) %>% colnames()
+  # check for ambiguous stuff
+  chcar <- inputframe_char %>%
+    dplyr::ungroup() %>%
+    dplyr::select_if(is.character) %>%
+    colnames()
   message(paste("Character columns : '", chcar, "' are not used to subset this dataset and instead only the first occuring
                 variable of each column per group was kept. To subset by these columns, add them to the input parameter 'by'.",
-                collapse = " "))
+    collapse = " "
+  ))
   return(inputframe_out)
 }
 
@@ -77,223 +82,250 @@ onePerCell <- function(inputframe, by=c("cell","frame")){
 #' @export
 #'
 #'
-checkVersionCompatible <- function(oldDataFrame, returnDataFrame=TRUE){
-  if("Xrotum"%in%colnames(oldDataFrame)){
-    colnames(oldDataFrame)[colnames(oldDataFrame)=="Xrotum"] <- "Xrot_micron"
-    colnames(oldDataFrame)[colnames(oldDataFrame)=="Yrotum"] <- "Yrot_micron"
+checkVersionCompatible <- function(oldDataFrame, returnDataFrame = TRUE) {
+  if ("Xrotum" %in% colnames(oldDataFrame)) {
+    colnames(oldDataFrame)[colnames(oldDataFrame) == "Xrotum"] <- "Xrot_micron"
+    colnames(oldDataFrame)[colnames(oldDataFrame) == "Yrotum"] <- "Yrot_micron"
     message("Found old variable names 'Xrotum' and 'Yrotum'.")
-    if(returnDataFrame==TRUE){
+    if (returnDataFrame == TRUE) {
       message("Changed old variables for new variables 'Xrot_micron' and 'Yrot_micron'")
       return(oldDataFrame)
     }
   }
-  if("Xrotum"%in%colnames(oldDataFrame)==F){
+  if ("Xrotum" %!in% colnames(oldDataFrame)) {
     message("No compatibility problems found.")
-    if(returnDataFrame==TRUE){
+    if (returnDataFrame == TRUE) {
       return(oldDataFrame)
     }
   }
 }
 
 
-##Set the pixel to um conversion
+## Set the pixel to um conversion
 #' @export
-addPixels2um <- function(pixelName, pixels2um){
-
-  if(missing(pixels2um)){
+addPixels2um <- function(pixelName, pixels2um) {
+  if (missing(pixels2um)) {
     pixels2um <- readline("Give the conversion factor from pixel to um:  ")
   }
-  if(missing(pixelName)){
+  if (missing(pixelName)) {
     pixelName <- readline("Give the name of your conversion factor um:  ")
   }
 
   newp <- c(as.numeric(pixels2um))
   names(newp) <- pixelName
-  newML <- append(get(magnificationList, envir=magEnv), newp)
-  assign(magnificationList, newML, envir=magEnv)
+  newML <- append(get(magnificationList, envir = magEnv), newp)
+  assign(magnificationList, newML, envir = magEnv)
   print("Currently loaded magnification converters:")
-  print(get(magnificationList, envir=magEnv))
-
+  print(get(magnificationList, envir = magEnv))
 }
 
 #' @export
-getPixels2um <- function(){
+getPixels2um <- function() {
   print("Currently loaded magnification converters:")
-  print(get(magnificationList, envir=magEnv))
+  print(get(magnificationList, envir = magEnv))
 }
 
 
 
-##merge spotfiles with only raw coordinates with mesh file with only raw data. add mesh length/width while on it.
+## merge spotfiles with only raw coordinates with mesh file with only raw data. add mesh length/width while on it.
 #' @export
-spotsInBox <- function(spotdata, meshdata, Xs = "x", Ys = "y", Xm = "X", Ym = "Y", meshInOutput=FALSE){
+spotsInBox <- function(spotdata, meshdata, Xs = "x", Ys = "y", Xm = "X", Ym = "Y", meshInOutput = FALSE) {
   if (!requireNamespace("shotGroups", quietly = TRUE)) {
     inp <- readline("Package 'shotGroups' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp %in% c("y","Y")){utils::install.packages("shotGroups")}else{stop("Canceled")}
+    if (inp %in% c("y", "Y")) {
+      utils::install.packages("shotGroups")
+    } else {
+      stop("Canceled")
+    }
   }
   if (!requireNamespace("sp", quietly = TRUE)) {
     inp <- readline("Package 'sp' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp %in% c("y","Y")){utils::install.packages("sp")}else{stop("Canceled")}
+    if (inp %in% c("y", "Y")) {
+      utils::install.packages("sp")
+    } else {
+      stop("Canceled")
+    }
   }
 
-   #rewrite colnames if not the same as suggested
-  pb <- utils::txtProgressBar(min=0, max=100, title="Total Progress SpotsInBox:")
-  if(Xs!="x"){
-    colnames(spotdata)[colnames(spotdata)==Xs] <- "x"
+  # rewrite colnames if not the same as suggested
+  pb <- utils::txtProgressBar(min = 0, max = 100, title = "Total Progress SpotsInBox:")
+  if (Xs != "x") {
+    colnames(spotdata)[colnames(spotdata) == Xs] <- "x"
   }
-  if(Ys!="y"){
-    colnames(spotdata)[colnames(spotdata)==Ys] <- "y"
+  if (Ys != "y") {
+    colnames(spotdata)[colnames(spotdata) == Ys] <- "y"
   }
-  if(Xm!="X"){
-    colnames(meshdata)[colnames(meshdata)==Xm] <- "X"
+  if (Xm != "X") {
+    colnames(meshdata)[colnames(meshdata) == Xm] <- "X"
   }
-  if(Ym!="Y"){
-    colnames(meshdata)[colnames(meshdata)==Ym] <- "Y"
+  if (Ym != "Y") {
+    colnames(meshdata)[colnames(meshdata) == Ym] <- "Y"
   }
 
-  if("max.width"%in%colnames(meshdata)==T){u <- 1}
-  if("max.width"%in%colnames(meshdata)==F){u<-2}
+  if ("max.width" %in% colnames(meshdata) == T) {
+    u <- 1
+  }
+  if ("max.width" %in% colnames(meshdata) == F) {
+    u <- 2
+  }
 
-  if("length"%in%colnames(meshdata)==T){a <- 1}
-  if("length"%in%colnames(meshdata)==F){a<-2} #if length and max width are already defined, don't touch them.
+  if ("length" %in% colnames(meshdata) == T) {
+    a <- 1
+  }
+  if ("length" %in% colnames(meshdata) == F) {
+    a <- 2
+  } # if length and max width are already defined, don't touch them.
   utils::setTxtProgressBar(pb, 5)
 
-#for-loop to re-write
-  #cellframe_meshdata <- paste(meshdata$cell, meshdata$frame, sep="_")
- # o <- meshdata %>%
+  # for-loop to re-write
+  # cellframe_meshdata <- paste(meshdata$cell, meshdata$frame, sep="_")
+  # o <- meshdata %>%
   #  dplyr::group_by(.data$frame, .data$cell) %>%
- #   getSpotsInBox(spotdatap = spotdata[spotdata$frame==meshdata$frame,],
-       #           u=u,
-     #             a=a,
-       #           returnMESH = FALSE)
+  #   getSpotsInBox(spotdatap = spotdata[spotdata$frame==meshdata$frame,],
+  #           u=u,
+  #             a=a,
+  #           returnMESH = FALSE)
 
 
   if (!requireNamespace("pbapply", quietly = TRUE)) {
-    o <- lapply(unique(meshdata$frame), function(x) lapply(unique(meshdata[meshdata$frame==x,]$cell), function(y) getSpotsInBox(meshp=meshdata[meshdata$frame==x&meshdata$cell==y,],
-                                                                                                                                spotdatap=spotdata[spotdata$frame==x,],
-                                                                                                                                u,
-                                                                                                                                a,
-                                                                                                                                returnMESH=meshInOutput)))
+    o <- lapply(unique(meshdata$frame), function(x) {
+      lapply(unique(meshdata[meshdata$frame == x, ]$cell), function(y) {
+        getSpotsInBox(
+          meshp = meshdata[meshdata$frame == x & meshdata$cell == y, ],
+          spotdatap = spotdata[spotdata$frame == x, ],
+          u,
+          a,
+          returnMESH = meshInOutput
+        )
+      })
+    })
   }
   if (requireNamespace("pbapply", quietly = TRUE)) {
-    o <- pbapply::pblapply(unique(meshdata$frame), function(x) lapply(unique(meshdata[meshdata$frame==x,]$cell), function(y) getSpotsInBox(meshp=meshdata[meshdata$frame==x&meshdata$cell==y,],
-                                                                                                                     spotdatap=spotdata[spotdata$frame==x,],
-                                                                                                                     u,
-                                                                                                                   a,
-                                                                                                                   returnMESH=meshInOutput)))
+    o <- pbapply::pblapply(unique(meshdata$frame), function(x) {
+      lapply(unique(meshdata[meshdata$frame == x, ]$cell), function(y) {
+        getSpotsInBox(
+          meshp = meshdata[meshdata$frame == x & meshdata$cell == y, ],
+          spotdatap = spotdata[spotdata$frame == x, ],
+          u,
+          a,
+          returnMESH = meshInOutput
+        )
+      })
+    })
   }
 
   utils::setTxtProgressBar(pb, 45)
 
   outs <- list()
-  outs$spots_relative <- do.call('rbind', lapply(o, function(x) do.call('rbind', lapply(x, function(y) y$REP))))
-  utils::setTxtProgressBar(pb,65)
+  outs$spots_relative <- do.call("rbind", lapply(o, function(x) do.call("rbind", lapply(x, function(y) y$REP))))
+  utils::setTxtProgressBar(pb, 65)
   names(outs) <- c("spots_relative")
 
-  if(meshInOutput==TRUE){
-    outs$mesh <-  do.call('rbind', lapply(o, function(x) do.call('rbind', lapply(x, function(y) y$MESH))))
+  if (meshInOutput == TRUE) {
+    outs$mesh <- do.call("rbind", lapply(o, function(x) do.call("rbind", lapply(x, function(y) y$MESH))))
     utils::setTxtProgressBar(pb, 85)
     names(outs) <- c("spots_relative", "mesh")
   }
   utils::setTxtProgressBar(pb, 100)
-  return(outs) #return datasets as list of dataframes
-
+  return(outs) # return datasets as list of dataframes
 }
 
-getSpotsInBox <- function(meshp, spotdatap, u, a, returnMESH=FALSE){
-
-  box <- suppressWarnings(shotGroups::getMinBBox(data.frame(x= meshp$X, y=meshp$Y))) #bounding box of cell
+getSpotsInBox <- function(meshp, spotdatap, u, a, returnMESH = FALSE) {
+  box <- suppressWarnings(shotGroups::getMinBBox(data.frame(x = meshp$X, y = meshp$Y))) # bounding box of cell
   lengthwidth <- c(box$width, box$height)
 
-  if(u==2){
+  if (u == 2) {
     meshp$max.width <- min(lengthwidth)
   }
-  if(a==2){
-    meshp$max.length <- max(lengthwidth) #take length/width if not already defined
+  if (a == 2) {
+    meshp$max.length <- max(lengthwidth) # take length/width if not already defined
   }
 
-  pinps <- suppressWarnings(sp::point.in.polygon(spotdatap$x, spotdatap$y, meshp$X,meshp$Y)) #find spot/object coordinates inside cell
-  pinps <- data.frame("x"=spotdatap$x, "y"=spotdatap$y, "pip"=pinps)
-  if(nrow(pinps)>0){
-    pinps <- pinps[pinps$pip==1,]
+  pinps <- suppressWarnings(sp::point.in.polygon(spotdatap$x, spotdatap$y, meshp$X, meshp$Y)) # find spot/object coordinates inside cell
+  pinps <- data.frame("x" = spotdatap$x, "y" = spotdatap$y, "pip" = pinps)
+  if (nrow(pinps) > 0) {
+    pinps <- pinps[pinps$pip == 1, ]
   }
 
-  pts <- data.frame(box$pts) #get midpoint of the bounding box + define median lines
-  shadowpts <- rbind(pts[2:4,], pts[1,])
-  distances <- (pts+shadowpts)/2 #coordinates of median lines
+  pts <- data.frame(box$pts) # get midpoint of the bounding box + define median lines
+  shadowpts <- rbind(pts[2:4, ], pts[1, ])
+  distances <- (pts + shadowpts) / 2 # coordinates of median lines
 
-  d1 <- data.frame(x = abs(distances$x-distances$x[1]), y =abs(distances$y-distances$y[1]))
+  d1 <- data.frame(x = abs(distances$x - distances$x[1]), y = abs(distances$y - distances$y[1]))
   d1$pointn <- 1:4
-  d1 <- d1[-1,]
+  d1 <- d1[-1, ]
   d1$dist <- polar_distance(d1$x, d1$y)
 
 
   un <- data.frame(table(round(d1$dist, 5)))
 
-  partdist <- un$Var1[un$Freq==1]
-  partner <- d1$pointn[round(d1$dist,5)==partdist]
-  rest <- d1$pointn[round(d1$dist,5)!=partdist]
+  partdist <- un$Var1[un$Freq == 1]
+  partner <- d1$pointn[round(d1$dist, 5) == partdist]
+  rest <- d1$pointn[round(d1$dist, 5) != partdist]
 
-  if(round(d1$dist[d1$pointn==partner],5)==round(min(lengthwidth),5)){
-    widthline <- distances[c(1,partner),]
-    lengthline <- distances[rest,]
+  if (round(d1$dist[d1$pointn == partner], 5) == round(min(lengthwidth), 5)) {
+    widthline <- distances[c(1, partner), ]
+    lengthline <- distances[rest, ]
   }
-  if(round(d1$dist[d1$pointn==partner],5)==round(max(lengthwidth),5)){
-    widthline <- distances[rest,]
-    lengthline <- distances[c(1,partner),] #pick which line is length/width
+  if (round(d1$dist[d1$pointn == partner], 5) == round(max(lengthwidth), 5)) {
+    widthline <- distances[rest, ]
+    lengthline <- distances[c(1, partner), ] # pick which line is length/width
   }
 
-  mp <- c(mean(lengthline$x), mean(lengthline$y)) #midpoint
-  X_cor <- meshp$X-mp[1]
-  Y_cor <- meshp$Y-mp[2]
-  angle <- (-box$angle)*pi/180 #angle to lay cell flat on x axis
+  mp <- c(mean(lengthline$x), mean(lengthline$y)) # midpoint
+  X_cor <- meshp$X - mp[1]
+  Y_cor <- meshp$Y - mp[2]
+  angle <- (-box$angle) * pi / 180 # angle to lay cell flat on x axis
 
   rotations <- rotate(X_cor, Y_cor, angle)
   meshp$X_rot <- rotations$x
   meshp$Y_rot <- rotations$y
 
-  if(nrow(pinps)>0){ #rotate spot/object points
-    Lc <- pinps$x-mp[1]
-    Dc <- pinps$y-mp[2]
+  if (nrow(pinps) > 0) { # rotate spot/object points
+    Lc <- pinps$x - mp[1]
+    Dc <- pinps$y - mp[2]
     rotations <- rotate(Lc, Dc, angle)
     pinps$l <- -rotations$x
     pinps$d <- -rotations$y
     pinps$max.width <- unique(meshp$max.width)
-    if("max_length"%in%colnames(meshp)){pinps$max.length <- unique(meshp$max_length)
-    mesh$max.length <- mesh$max_length
-    mesh$max_length <- NULL}
-    else{pinps$max.length <- unique(meshp$max.length)}
+    if ("max_length" %in% colnames(meshp)) {
+      pinps$max.length <- unique(meshp$max_length)
+      mesh$max.length <- mesh$max_length
+      mesh$max_length <- NULL
+    } else {
+      pinps$max.length <- unique(meshp$max.length)
+    }
     pinps$cell <- unique(meshp$cell)
     pinps$frame <- unique(meshp$frame)
   }
-  #if(i==min.i&&n==min.n){ #first data frame in dataset
+  # if(i==min.i&&n==min.n){ #first data frame in dataset
   #  if(nrow(pinps)>0){
   #    REP <- pinps
   #    }
   #  Mfull <- meshp
   #  }
-  if("trajectory"%in%colnames(spotdatap)==T){
-    pinps <- merge(spotdatap[,c("x", "y", "trajectory", "displacement_sq", "trajectory_length")], pinps)
+  if ("trajectory" %in% colnames(spotdatap) == T) {
+    pinps <- merge(spotdatap[, c("x", "y", "trajectory", "displacement_sq", "trajectory_length")], pinps)
   }
 
-  if(returnMESH==TRUE){
+  if (returnMESH == TRUE) {
     return(list("REP" = pinps, "MESH" = meshp))
   }
-  if(returnMESH==FALSE){
-    return(list("REP"=pinps))
+  if (returnMESH == FALSE) {
+    return(list("REP" = pinps))
   }
 }
 
 
-getpointsaround <- function(datsaround, angle){
+getpointsaround <- function(datsaround, angle) {
   xlist <- c()
   ylist <- c()
-  
+
   xlist[1] <- rotate(datsaround$X_corRM, datsaround$Y_corRM, angle)$x
   xlist[2] <- rotate(datsaround$X_corRM, datsaround$Y_corRMa, angle)$x
   xlist[3] <- rotate(datsaround$X_corRMa, datsaround$Y_corRMa, angle)$x
   xlist[4] <- rotate(datsaround$X_corRMa, datsaround$Y_corRM, angle)$x
-  
+
   ylist[1] <- rotate(datsaround$X_corRM, datsaround$Y_corRM, angle)$y
   ylist[2] <- rotate(datsaround$X_corRM, datsaround$Y_corRMa, angle)$y
   ylist[3] <- rotate(datsaround$X_corRMa, datsaround$Y_corRMa, angle)$y
@@ -303,8 +335,8 @@ getpointsaround <- function(datsaround, angle){
   return(datforpoint)
 }
 
-turnraws <- function(rawdatafile, i, n, mp, angle){
-  rawr <- rawdatafile[rawdatafile$frame==i&rawdatafile$cell==n,]
+turnraws <- function(rawdatafile, i, n, mp, angle) {
+  rawr <- rawdatafile[rawdatafile$frame == i & rawdatafile$cell == n, ]
   X_corR <- rawr$x - mp[1]
   Y_corR <- rawr$y - mp[2]
   rotations <- rotate(X_corR, Y_corR, angle)
@@ -312,62 +344,69 @@ turnraws <- function(rawdatafile, i, n, mp, angle){
   rawr$Y_rot <- rotations$y
   rawr$pointN <- c(1:nrow(rawr))
   datsaround <- data.frame(X_corRM = X_corR - 0.5, X_corRMa = X_corR + 0.5, Y_corRM = Y_corR - 0.5, Y_corRMa = Y_corR + 0.5, pointN = rawr$pointN)
-  datsaround <- lapply(1:nrow(datsaround), function(x) getpointsaround(datsaround[x,], angle))
+  datsaround <- lapply(1:nrow(datsaround), function(x) getpointsaround(datsaround[x, ], angle))
   datsaround <- do.call(rbind, datsaround)
   rawr <- merge(rawr, datsaround)
   return(rawr)
 }
 
-turncell <- function(MESHp, u, rawdatafile, a, n, i, ars){
+turncell <- function(MESHp, u, rawdatafile, a, n, i, ars) {
   if (!requireNamespace("shotGroups", quietly = TRUE)) {
-
     inp <- readline("Package 'shotGroups' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp %in% c("y","Y")){utils::install.packages("shotGroups")}else{stop("Canceled")}
+    if (inp %in% c("y", "Y")) {
+      utils::install.packages("shotGroups")
+    } else {
+      stop("Canceled")
+    }
   }
   if (!requireNamespace("sp", quietly = TRUE)) {
     inp <- readline("Package 'sp' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp %in% c("y","Y")){utils::install.packages("sp")}else{stop("Canceled")}
+    if (inp %in% c("y", "Y")) {
+      utils::install.packages("sp")
+    } else {
+      stop("Canceled")
+    }
   }
-  box <- suppressWarnings(shotGroups::getMinBBox(data.frame(x= MESHp$X, y=MESHp$Y))) #bounding box of cell
+  box <- suppressWarnings(shotGroups::getMinBBox(data.frame(x = MESHp$X, y = MESHp$Y))) # bounding box of cell
   lengthwidth <- c(box$width, box$height)
-  if(ars==2){
-    MESHp$area <- sp::Polygon(cbind(x=MESHp$X, y=MESHp$Y))@area
+  if (ars == 2) {
+    MESHp$area <- sp::Polygon(cbind(x = MESHp$X, y = MESHp$Y))@area
   }
-  if(u==2){
+  if (u == 2) {
     MESHp$max.width <- min(lengthwidth)
   }
-  if(a==1){
-    MESHp$max.length <- max(lengthwidth) #take length/width if not already defined
+  if (a == 1) {
+    MESHp$max.length <- max(lengthwidth) # take length/width if not already defined
   }
-  pts <- data.frame(box$pts) #get midpoint of the bounding box + define median lines
-  shadowpts <- rbind(pts[2:4,], pts[1,])
-  distances <- (pts+shadowpts)/2 #coordinates of median lines
+  pts <- data.frame(box$pts) # get midpoint of the bounding box + define median lines
+  shadowpts <- rbind(pts[2:4, ], pts[1, ])
+  distances <- (pts + shadowpts) / 2 # coordinates of median lines
 
-  d1 <- data.frame(x = abs(distances$x-distances$x[1]), y =abs(distances$y-distances$y[1]))
+  d1 <- data.frame(x = abs(distances$x - distances$x[1]), y = abs(distances$y - distances$y[1]))
   d1$pointn <- 1:4
-  d1 <- d1[-1,]
+  d1 <- d1[-1, ]
   d1$dist <- polar_distance(d1$x, d1$y)
 
 
   un <- data.frame(table(round(d1$dist, 5)))
 
-  partdist <- un$Var1[un$Freq==1]
-  partner <- d1$pointn[round(d1$dist,5)==partdist]
-  rest <- d1$pointn[round(d1$dist,5)!=partdist]
+  partdist <- un$Var1[un$Freq == 1]
+  partner <- d1$pointn[round(d1$dist, 5) == partdist]
+  rest <- d1$pointn[round(d1$dist, 5) != partdist]
 
-  if(round(d1$dist[d1$pointn==partner],5)==round(min(lengthwidth),5)){
-    widthline <- distances[c(1,partner),]
-    lengthline <- distances[rest,]
+  if (round(d1$dist[d1$pointn == partner], 5) == round(min(lengthwidth), 5)) {
+    widthline <- distances[c(1, partner), ]
+    lengthline <- distances[rest, ]
   }
-  if(round(d1$dist[d1$pointn==partner],5)==round(max(lengthwidth),5)){
-    widthline <- distances[rest,]
-    lengthline <- distances[c(1,partner),] #pick which line is length/width
+  if (round(d1$dist[d1$pointn == partner], 5) == round(max(lengthwidth), 5)) {
+    widthline <- distances[rest, ]
+    lengthline <- distances[c(1, partner), ] # pick which line is length/width
   }
 
-  mp <- c(mean(lengthline$x), mean(lengthline$y)) #midpoint
-  X_cor <- MESHp$X-mp[1]
-  Y_cor <- MESHp$Y-mp[2]
-  angle <- (180-box$angle)*pi/180 #angle to lay cell flat on x axis
+  mp <- c(mean(lengthline$x), mean(lengthline$y)) # midpoint
+  X_cor <- MESHp$X - mp[1]
+  Y_cor <- MESHp$Y - mp[2]
+  angle <- (180 - box$angle) * pi / 180 # angle to lay cell flat on x axis
 
   MESHp$angle <- angle
   MESHp$Xmid <- mp[1]
@@ -375,7 +414,7 @@ turncell <- function(MESHp, u, rawdatafile, a, n, i, ars){
   rotations <- rotate(X_cor, Y_cor, angle)
   MESHp$X_rot <- rotations$x
   MESHp$Y_rot <- rotations$y
-  if(MESHp$Y_rot[[1]]>0){
+  if (MESHp$Y_rot[[1]] > 0) {
     rotations <- rotate(MESHp$X_rot, MESHp$Y_rot, pi)
     MESHp$Y_rot <- rotations$y
     MESHp$X_rot <- rotations$x
@@ -383,165 +422,194 @@ turncell <- function(MESHp, u, rawdatafile, a, n, i, ars){
   }
 
 
-  if(!missing(rawdatafile)){
+  if (!missing(rawdatafile)) {
     message(paste("Turning raw data for cell", n))
 
     rawr <- turnraws(rawdatafile, i, n, mp, angle)
-    return(list(mesh=MESHp, rawdat=rawr))
+    return(list(mesh = MESHp, rawdat = rawr))
   }
-  if(missing(rawdatafile)){return(MESHp)}
+  if (missing(rawdatafile)) {
+    return(MESHp)
+  }
 }
 
 
-meshTurn <- function(MESH, Xm="X", Ym="Y", rawdatafile){
-  if(Xm!="X"){colnames(MESH)[colnames(MESH)==Xm] <- "X"}
-  if(Ym!="Y"){colnames(MESH)[colnames(MESH)==Ym] <- "Y"}
+meshTurn <- function(MESH, Xm = "X", Ym = "Y", rawdatafile) {
+  if (Xm != "X") {
+    colnames(MESH)[colnames(MESH) == Xm] <- "X"
+  }
+  if (Ym != "Y") {
+    colnames(MESH)[colnames(MESH) == Ym] <- "Y"
+  }
 
-  if("max.width"%in%colnames(MESH)){u <- 1}else{u<-2}
-  if("max.length"%in%colnames(MESH)){a <- 2}else{a<-1}
-  if("area"%in%colnames(MESH)){ars <- 1}else{ars<-2}
-  if("x0"%in%colnames(MESH)){
+  if ("max.width" %in% colnames(MESH)) {
+    u <- 1
+  } else {
+    u <- 2
+  }
+  if ("max.length" %in% colnames(MESH)) {
+    a <- 2
+  } else {
+    a <- 1
+  }
+  if ("area" %in% colnames(MESH)) {
+    ars <- 1
+  } else {
+    ars <- 2
+  }
+  if ("x0" %in% colnames(MESH)) {
     MESH <- spotrXYMESH(MESH)
   }
-  if(!missing(rawdatafile)){
+  if (!missing(rawdatafile)) {
     Rlist <- list()
   }
   Mlist <- list()
 
-  #if length and max width are already defined, don't touch them.
-  for(i in unique(MESH$frame)){ #per frame
-    #print(paste("Turning meshes for frame", i))
-    M <- MESH[MESH$frame==i,]
-    if(!missing(rawdatafile)){
-      Mlistboth <- lapply(unique(M$cell), function(x) turncell(M[M$cell==x,], u, rawdatafile,a, x, i, ars=ars))
+  # if length and max width are already defined, don't touch them.
+  for (i in unique(MESH$frame)) { # per frame
+    # print(paste("Turning meshes for frame", i))
+    M <- MESH[MESH$frame == i, ]
+    if (!missing(rawdatafile)) {
+      Mlistboth <- lapply(unique(M$cell), function(x) turncell(M[M$cell == x, ], u, rawdatafile, a, x, i, ars = ars))
       MlistF <- lapply(Mlistboth, function(x) x$mesh)
       RlistF <- lapply(Mlistboth, function(x) x$rawdat)
       Rlist[[i]] <- do.call(rbind, RlistF)
     }
-    if(missing(rawdatafile)){MlistF <- lapply(unique(M$cell), function(x) turncell(M[M$cell==x,], u, a=a, n=x, i=i, ars=ars))}
-    Mlist[[i]] <- do.call(rbind,MlistF)
-
+    if (missing(rawdatafile)) {
+      MlistF <- lapply(unique(M$cell), function(x) turncell(M[M$cell == x, ], u, a = a, n = x, i = i, ars = ars))
+    }
+    Mlist[[i]] <- do.call(rbind, MlistF)
   }
 
   Mfull <- do.call(rbind, Mlist)
-  if(missing(rawdatafile)){
-    return(Mfull) #return datasets as list of dataframes
-  }else{
-    rawdata_turned <- do.call(rbind, Rlist)
-    rawdata_turned <- merge(rawdata_turned, unique(Mfull[,c("cell", "frame", "max.length", "max.width", "area")]))
-    return(list(mesh = Mfull, rawdata_turned = rawdata_turned))}
+  if (missing(rawdatafile)) {
+    return(Mfull) # return datasets as list of dataframes
+  }
+  rawdata_turned <- do.call(rbind, Rlist)
+  rawdata_turned <- merge(rawdata_turned, unique(Mfull[, c("cell", "frame", "max.length", "max.width", "area")]))
+
+  return(list(mesh = Mfull, rawdata_turned = rawdata_turned))
 }
 
-spotrXYMESH <- function(MESH, x_1="x1", y_1="y1",x_0="x0", y_0="y0" ){
+spotrXYMESH <- function(MESH, x_1 = "x1", y_1 = "y1", x_0 = "x0", y_0 = "y0") {
   u <- colnames(MESH)
-  MESH <- MESH[!is.na(MESH$cell),]
-  MESH0 <- MESH[,u[u!=x_1&u!=y_1]]
-  MESH1 <- MESH[,u[u!=x_0&u!=y_0]]
+  MESH <- MESH[!is.na(MESH$cell), ]
+  MESH0 <- MESH[, u[u != x_1 & u != y_1]]
+  MESH1 <- MESH[, u[u != x_0 & u != y_0]]
   MESH1$xy <- 1
   MESH0$xy <- 0
   colnames(MESH1) <- gsub("1", "", colnames(MESH1))
   colnames(MESH0) <- gsub("0", "", colnames(MESH0))
-  ##need to fix lapply function - check dapply? mapply? otherwise first make list of each row.
-  MESH1$cf <- paste(MESH1$cell, MESH1$frame, sep="_")
-  MESH1 <- do.call('rbind', lapply(unique(MESH1$cf), function(x) mesh1Fun(MESH1[MESH1$cf==x,])))
+  ## need to fix lapply function - check dapply? mapply? otherwise first make list of each row.
+  MESH1$cf <- paste(MESH1$cell, MESH1$frame, sep = "_")
+  MESH1 <- do.call("rbind", lapply(unique(MESH1$cf), function(x) mesh1Fun(MESH1[MESH1$cf == x, ])))
   MESH1$cf <- NULL
-  MESH <- merge(MESH0, MESH1, all=T)
-  colnames(MESH)[colnames(MESH)=="x"] <- "X"
-  colnames(MESH)[colnames(MESH)=="y"] <- "Y"
-  MESH <- MESH[order(MESH$frame, MESH$cell, MESH$num),]
+  MESH <- merge(MESH0, MESH1, all = T)
+  colnames(MESH)[colnames(MESH) == "x"] <- "X"
+  colnames(MESH)[colnames(MESH) == "y"] <- "Y"
+  MESH <- MESH[order(MESH$frame, MESH$cell, MESH$num), ]
   return(MESH)
 }
 
-mesh1Fun <- function(MESH1){
-  MESH1$num <- 1 + max(MESH1$num, na.rm=T)*2 - MESH1$num
+mesh1Fun <- function(MESH1) {
+  MESH1$num <- 1 + max(MESH1$num, na.rm = T) * 2 - MESH1$num
   return(MESH1)
 }
 
-mergeframes <- function(REP, MESH, mag="No_PixelCorrection", cutoff=T, maxfactor=2, minfactor=0.5, remOut=T, ouf=F){
+mergeframes <- function(REP, MESH, mag = "No_PixelCorrection", cutoff = T, maxfactor = 2, minfactor = 0.5, remOut = T, ouf = F) {
 
-  #REP<- REP[(0<REP$l),]
-  if("rel.l" %in% colnames(REP)){
-    REP <-REP[(REP$rel.l<1),]
+  # REP<- REP[(0<REP$l),]
+  if ("rel.l" %in% colnames(REP)) {
+    REP <- REP[(REP$rel.l < 1), ]
   }
-  if("max.length"%in%colnames(MESH)!=T&"max_length"%in%colnames(MESH)!=T){
+  if ("max.length" %in% colnames(MESH) != T & "max_length" %in% colnames(MESH) != T) {
     MESH$max.length <- MESH$length
   }
-  if("max_length"%in%colnames(MESH)){
+  if ("max_length" %in% colnames(MESH)) {
     MESH$max.length <- MESH$max_length
   }
-  if("area"%in%colnames(MESH)){
-    M <- unique(MESH[,c("cell", "frame", "max.length", "max.width", "area")])
-  }else{M <- unique(MESH[,c("cell", "frame", "max.length", "max.width")])}
-  M <- M[order(M$max.length),]
+  if ("area" %in% colnames(MESH)) {
+    M <- unique(MESH[, c("cell", "frame", "max.length", "max.width", "area")])
+  } else {
+    M <- unique(MESH[, c("cell", "frame", "max.length", "max.width")])
+  }
+  M <- M[order(M$max.length), ]
   M$cellnum <- c(1:nrow(M))
 
-  #merging
-  MR <- merge(M,REP, all=T)
+  # merging
+  MR <- merge(M, REP, all = T)
 
-  #remove MR's cells which have NA's in the cell area
-  MR <- MR[!is.na(MR$max.length),]
-  #remove duplicated rows
-  MR <- MR[!duplicated(MR$l)|is.na(MR$l)&!duplicated(MR$d)|is.na(MR$d),]
+  # remove MR's cells which have NA's in the cell area
+  MR <- MR[!is.na(MR$max.length), ]
+  # remove duplicated rows
+  MR <- MR[!duplicated(MR$l) | is.na(MR$l) & !duplicated(MR$d) | is.na(MR$d), ]
 
   MR <- spotMR(MR)
   MR$totalspot[is.na(MR$totalspot)] <- 0
 
-  #if needed: remove smallest and largest ones (cutoff: smaller than 1/2 mean and larger than 2x mean)
-  if(cutoff==T){
-    MR <- MR[MR$max.length<(maxfactor*mean(MR$max.length)),]
-    MR <- MR[MR$max.length>(minfactor*mean(MR$max.length)),]
+  # if needed: remove smallest and largest ones (cutoff: smaller than 1/2 mean and larger than 2x mean)
+  if (cutoff == T) {
+    MR <- MR[MR$max.length < (maxfactor * mean(MR$max.length)), ]
+    MR <- MR[MR$max.length > (minfactor * mean(MR$max.length)), ]
   }
 
-  MR <- MR[order(MR$max.length),]
+  MR <- MR[order(MR$max.length), ]
 
-  #make column with row numbers per cell length.
+  # make column with row numbers per cell length.
   MR$num <- c(1:nrow(MR))
 
-  pix2um <- unlist(get(magnificationList, envir=magEnv)[mag])
-  MR <- LimDum(MR, pix2um, ouf=ouf)
+  pix2um <- unlist(get(magnificationList, envir = magEnv)[mag])
+  MR <- LimDum(MR, pix2um, ouf = ouf)
   return(MR)
 }
 
-#add spotnumbers!
-spotMR <- function(dat){
-  if("spot" %in% colnames(dat)){
-    #NA in spots replaced by "0"
+# add spotnumbers!
+spotMR <- function(dat) {
+  if ("spot" %in% colnames(dat)) {
+    # NA in spots replaced by "0"
     dat$spot[is.na(dat$spot)] <- 0
-  }else{
-    dat <-dat[order(dat$frame, dat$cell,dat$max.length),]
+  } else {
+    dat <- dat[order(dat$frame, dat$cell, dat$max.length), ]
     dat$spot <- 1
-    for(n in 1:(nrow(dat)-1)){
-      if(dat$max.length[n+1]==dat$max.length[n]){
-        dat$spot[n+1] <- dat$spot[n] + 1
-      } }
-    dat$spot[is.na(dat$spot)] <- 0 }
-  if("totalspot"%in%colnames(dat)){
+    for (n in 1:(nrow(dat) - 1)) {
+      if (dat$max.length[n + 1] == dat$max.length[n]) {
+        dat$spot[n + 1] <- dat$spot[n] + 1
+      }
+    }
+    dat$spot[is.na(dat$spot)] <- 0
+  }
+  if ("totalspot" %in% colnames(dat)) {
     dat$totalspot[is.na(dat$totalspot)] <- 0
-  }else{dat$cellframe <- paste(dat$cell, dat$frame, sep=".")
-  spotn <- data.frame(cellframe = unique(dat$cellframe), totalspot = unlist(lapply(unique(dat$cellframe), function(x)max(dat$spot[dat$cellframe==x]))))
-  dat <- merge(dat, spotn)
+  } else {
+    dat$cellframe <- paste(dat$cell, dat$frame, sep = ".")
+    spotn <- data.frame(cellframe = unique(dat$cellframe), totalspot = unlist(lapply(unique(dat$cellframe), function(x) max(dat$spot[dat$cellframe == x]))))
+    dat <- merge(dat, spotn)
   }
   return(dat)
 }
 
-centrefun <- function(dat, xie="ob_x", yie="ob_y"){
+centrefun <- function(dat, xie = "ob_x", yie = "ob_y") {
   if (!requireNamespace("shotGroups", quietly = TRUE)) {
     inp <- readline("Package 'shotGroups' needed for this function to work. Press 'y' to install, or any other key to cancel.")
-    if(inp %in% c("y","Y")){utils::install.packages("shotGroups")}else{stop("Canceled")}
+    if (inp %in% c("y", "Y")) {
+      utils::install.packages("shotGroups")
+    } else {
+      stop("Canceled")
+    }
   }
-  dat <- dat[!is.na(dat$ob_x),]
+  dat <- dat[!is.na(dat$ob_x), ]
   dat$centre_x <- NA
   dat$centre_y <- NA
   if (requireNamespace("pbapply", quietly = TRUE)) {
-  dat <- do.call('rbind', pbapply::pblapply(unique(dat$obID), function(x) takeObjectCentre(dat[dat$obID==x,], xie, yie)))
+    dat <- do.call("rbind", pbapply::pblapply(unique(dat$obID), function(x) takeObjectCentre(dat[dat$obID == x, ], xie, yie)))
   }
   if (!requireNamespace("pbapply", quietly = TRUE)) {
-    dat <- do.call('rbind', lapply(unique(dat$obID), function(x) takeObjectCentre(dat[dat$obID==x,], xie, yie)))
+    dat <- do.call("rbind", lapply(unique(dat$obID), function(x) takeObjectCentre(dat[dat$obID == x, ], xie, yie)))
   }
   return(dat)
 }
 
-takeObjectCentre <- function(dat, xie, yie){
+takeObjectCentre <- function(dat, xie, yie) {
   woei <- as.matrix(dat[c(xie, yie)])
   cen <- shotGroups::getMinCircle(woei)$ctr
   dat$centre_x <- cen[1]
@@ -549,21 +617,23 @@ takeObjectCentre <- function(dat, xie, yie){
   return(dat)
 }
 
-#add object centre to mesh file and turn accordingly
+# add object centre to mesh file and turn accordingly
 #' @importFrom dplyr %>%
-midobject <- function(MESH, OBJ, p2um){
+midobject <- function(MESH, OBJ, p2um) {
   OBJ$angle <- NULL
   OBJ$max.length <- NULL
   MESH <- MESH %>%
     dplyr::left_join(OBJ) %>%
-    dplyr::mutate(xccor = .data$centre_x - .data$Xmid,
-                  yccor = .data$centre_y - .data$Ymid,
-                  xcorcor = .data$ob_x - .data$Xmid,
-                  ycorcor = .data$ob_y - .data$Ymid,
-                  Lmid = .data$xccor * cos(.data$angle)-.data$yccor*sin(.data$angle),
-                  Dum = .data$xccor * sin(.data$angle)+.data$yccor*cos(.data$angle),
-                  ob_out_x = .data$xcorcor * cos(.data$angle) - .data$ycorcor * sin(.data$angle),
-                  ob_out_y = .data$xcorcor * sin(.data$angle) + .data$ycorcor * cos(.data$angle)) %>%
+    dplyr::mutate(
+      xccor = .data$centre_x - .data$Xmid,
+      yccor = .data$centre_y - .data$Ymid,
+      xcorcor = .data$ob_x - .data$Xmid,
+      ycorcor = .data$ob_y - .data$Ymid,
+      Lmid = .data$xccor * cos(.data$angle) - .data$yccor * sin(.data$angle),
+      Dum = .data$xccor * sin(.data$angle) + .data$yccor * cos(.data$angle),
+      ob_out_x = .data$xcorcor * cos(.data$angle) - .data$ycorcor * sin(.data$angle),
+      ob_out_y = .data$xcorcor * sin(.data$angle) + .data$ycorcor * cos(.data$angle)
+    ) %>%
     dplyr::select(.data$frame, .data$cell, .data$obpath, .data$obnum, .data$obID, .data$max.length, .data$max.width, .data$Dum, .data$Lmid, .data$ob_out_x, .data$ob_out_y) %>%
     dplyr::distinct() %>%
     dplyr::mutate(num = dplyr::dense_rank(.data$max.length)) %>%
@@ -571,50 +641,54 @@ midobject <- function(MESH, OBJ, p2um){
     dplyr::mutate(ob_out_x = .data$ob_out_x * p2um, ob_out_y = .data$ob_out_y * p2um)
   return(MESH)
 
-  #MESH$xccor <- MESH$centre_x - MESH$Xmid
-  #MESH$yccor <- MESH$centre_y - MESH$Ymid
-  #MESH$xcorcor <- MESH$ob_x - MESH$Xmid
- # MESH$ycorcor <- MESH$ob_y - MESH$Ymid
+  # MESH$xccor <- MESH$centre_x - MESH$Xmid
+  # MESH$yccor <- MESH$centre_y - MESH$Ymid
+  # MESH$xcorcor <- MESH$ob_x - MESH$Xmid
+  # MESH$ycorcor <- MESH$ob_y - MESH$Ymid
 
- # MESH$Lmid <- MESH$xccor * cos(MESH$angle) - MESH$yccor * sin(MESH$angle)
- # MESH$Dum <- MESH$xccor * sin(MESH$angle) + MESH$yccor * cos(MESH$angle)
- # MESH$ob_out_x <- MESH$xcorcor * cos(MESH$angle) - MESH$ycorcor * sin(MESH$angle)
- # MESH$ob_out_y <- MESH$xcorcor * sin(MESH$angle) + MESH$ycorcor * cos(MESH$angle)
-  #MO <- MESH[,c("frame", "cell", "obpath", "obnum", "obID", "max.length", "max.width", "Dum", "Lmid", "ob_out_x", "ob_out_y")]
-#  MO <- unique(MO)
+  # MESH$Lmid <- MESH$xccor * cos(MESH$angle) - MESH$yccor * sin(MESH$angle)
+  # MESH$Dum <- MESH$xccor * sin(MESH$angle) + MESH$yccor * cos(MESH$angle)
+  # MESH$ob_out_x <- MESH$xcorcor * cos(MESH$angle) - MESH$ycorcor * sin(MESH$angle)
+  # MESH$ob_out_y <- MESH$xcorcor * sin(MESH$angle) + MESH$ycorcor * cos(MESH$angle)
+  # MO <- MESH[,c("frame", "cell", "obpath", "obnum", "obID", "max.length", "max.width", "Dum", "Lmid", "ob_out_x", "ob_out_y")]
+  #  MO <- unique(MO)
 
-  #MOnum <- unique(MO[,c("frame", "cell", "max.length", "obnum")])
-  #MOnum <- MOnum[order(MOnum$max.length),]
-  #MOnum$num <- 1:nrow(MOnum)
-  #MO <- merge(MOnum, MO)
-  #MO <- LimDum(MO, p2um)
-  #MO$ob_out_x <- MO$ob_out_x*p2um
-  #MO$ob_out_y <- MO$ob_out_y*p2um
-  #return(MO)
+  # MOnum <- unique(MO[,c("frame", "cell", "max.length", "obnum")])
+  # MOnum <- MOnum[order(MOnum$max.length),]
+  # MOnum$num <- 1:nrow(MOnum)
+  # MO <- merge(MOnum, MO)
+  # MO <- LimDum(MO, p2um)
+  # MO$ob_out_x <- MO$ob_out_x*p2um
+  # MO$ob_out_y <- MO$ob_out_y*p2um
+  # return(MO)
 }
 
 ################################################################################################
-#plot preparation
-#quartiles, maxima, etc.
-LimDum <- function(MR, pix2um, remOut=T, ouf=F){
-  if("l"%in%colnames(MR)==TRUE&ouf==F){
-    MR$Lmid<-MR$l*pix2um
+# plot preparation
+# quartiles, maxima, etc.
+LimDum <- function(MR, pix2um, remOut = T, ouf = F) {
+  if ("l" %in% colnames(MR) == TRUE & ouf == F) {
+    MR$Lmid <- MR$l * pix2um
   }
-  if("l"%in%colnames(MR)==TRUE&ouf==T){
-    MR$Lmid<-(MR$l-(MR$max.length/2))*pix2um
+  if ("l" %in% colnames(MR) == TRUE & ouf == T) {
+    MR$Lmid <- (MR$l - (MR$max.length / 2)) * pix2um
   }
-  if("l"%in%colnames(MR)!=TRUE){
-    MR$Lmid <- MR$Lmid*pix2um
-    }
-  MR$pole1<- -MR$max.length*0.5*pix2um
-  MR$pole2<- -MR$pole1
-  if("d"%in%colnames(MR)){MR$Dum <- MR$d*pix2um}
-  if("d"%in%colnames(MR)==FALSE){MR$Dum <- MR$Dum*pix2um}
-  MR$max_um <- MR$max.length*pix2um
-  MR$maxwum <- MR$max.width*pix2um
-  if(remOut==T){
-    MR <- MR[abs(MR$Lmid)<MR$pole2|is.na(MR$Lmid),]
-    MR <- MR[abs(MR$Dum)<(MR$max.width/2)|is.na(MR$Lmid),]
+  if ("l" %in% colnames(MR) != TRUE) {
+    MR$Lmid <- MR$Lmid * pix2um
+  }
+  MR$pole1 <- -MR$max.length * 0.5 * pix2um
+  MR$pole2 <- -MR$pole1
+  if ("d" %in% colnames(MR)) {
+    MR$Dum <- MR$d * pix2um
+  }
+  if ("d" %in% colnames(MR) == FALSE) {
+    MR$Dum <- MR$Dum * pix2um
+  }
+  MR$max_um <- MR$max.length * pix2um
+  MR$maxwum <- MR$max.width * pix2um
+  if (remOut == T) {
+    MR <- MR[abs(MR$Lmid) < MR$pole2 | is.na(MR$Lmid), ]
+    MR <- MR[abs(MR$Dum) < (MR$max.width / 2) | is.na(MR$Lmid), ]
   }
   return(MR)
 }
@@ -622,17 +696,17 @@ LimDum <- function(MR, pix2um, remOut=T, ouf=F){
 mL <- list("100x_TIRF" = 0.05204891, "100x_DVMolgen" = 0.0645500, "No_PixelCorrection" = 1, "100x_FRAP" = 0.0499548)
 magnificationList <- "magnificationList"
 magEnv <- new.env()
-assign(magnificationList, mL, envir=magEnv)
+assign(magnificationList, mL, envir = magEnv)
 
 
 
-#'@export
-micron <- function(){
+#' @export
+micron <- function() {
   return("\u00b5m")
 }
 
 
-#'@export
+#' @export
 #' @title Orient your cells by the side in which your spots or objects (predominantly) are located
 #'
 #' \code{orientCells()} takes a \code{spots_relative} or \code{object_relative} dataset and uses the relative localization of each spot or mid-point of each object
@@ -647,47 +721,49 @@ micron <- function(){
 #' \dontrun{
 #'
 #' output <- orientCells(dataTurn = myData$spots_relative, cellData = list(myData$mesh, myData$object_relative))
-#'}
+#' }
 #'
-orientCells <- function(dataTurn, cellData, removeNonOriented = FALSE){
-  #check if the dataset is relative
-  if(!"Lmid"%in%colnames(dataTurn)){
-    if(!"l"%in%colnames(dataTurn)){
+orientCells <- function(dataTurn, cellData, removeNonOriented = FALSE) {
+  # check if the dataset is relative
+  if (!"Lmid" %in% colnames(dataTurn)) {
+    if (!"l" %in% colnames(dataTurn)) {
       stop("No relative localizations found in the 'dataTurn' input. Please use a dataframe with relative spot or object locatizations.")
     }
-    if("l"%>%colnames(dataTurn)){
-      #rename l & d
+    if ("l" %>% colnames(dataTurn)) {
+      # rename l & d
       dataTurn <- dataTurn %>%
-        dplyr::rename(Lmid=.data$l, Dum = .data$d)
+        dplyr::rename(Lmid = .data$l, Dum = .data$d)
     }
   }
-  #in case of objects
-  if("obID"%in%colnames(dataTurn)){
+  # in case of objects
+  if ("obID" %in% colnames(dataTurn)) {
     dataTurn <- dataTurn %>%
       dplyr::group_by(.data$frame, .data$cell) %>%
-      dplyr::mutate(totalspot = dplyr::n_distinct(.data$obID),
-                    spot = .data$obID) %>%
+      dplyr::mutate(
+        totalspot = dplyr::n_distinct(.data$obID),
+        spot = .data$obID
+      ) %>%
       dplyr::ungroup()
   }
 
-  #classify location of spot/object middle with variable 'pol' (handy if you have more than 1 spot)
+  # classify location of spot/object middle with variable 'pol' (handy if you have more than 1 spot)
   dataTurn <- dataTurn %>%
-    dplyr::mutate(pol = dplyr::if_else(.data$Lmid<0, -1, 1, 0))
+    dplyr::mutate(pol = dplyr::if_else(.data$Lmid < 0, -1, 1, 0))
 
-  if(max(dataTurn$totalspot)>1){
+  if (max(dataTurn$totalspot) > 1) {
     message("More than one spot per cell detected. Function takes the side most spots are on (in case of a tie, cell is classified as 'non-polarized' by setting variable 'pol' to 0).")
     dataSmall <- dataTurn %>%
       dplyr::distinct(.data$frame, .data$cell, .data$spot, .data$pol) %>%
       dplyr::group_by(.data$frame, .data$cell) %>%
       dplyr::mutate(pol = mean(.data$pol)) %>%
-      dplyr::mutate(pol = dplyr::if_else(.data$pol==-1|.data$pol==1, .data$pol, 0, 0))
+      dplyr::mutate(pol = dplyr::if_else(.data$pol == -1 | .data$pol == 1, .data$pol, 0, 0))
     dataTurn <- dataTurn %>%
       dplyr::select(-.data$pol) %>%
       dplyr::left_join(dataSmall)
   }
 
-  if(removeNonOriented == TRUE){
-    dataTurn <- dataTurn[dataTurn$pol!=0,]
+  if (removeNonOriented == TRUE) {
+    dataTurn <- dataTurn[dataTurn$pol != 0, ]
   }
 
   listPol <- dataTurn %>%
@@ -695,162 +771,152 @@ orientCells <- function(dataTurn, cellData, removeNonOriented = FALSE){
 
   dataTurn <- turnEach(dataTurn)
 
-  if(is.data.frame(cellData)==FALSE){
-    if(is.list(cellData)==FALSE){
+  if (is.data.frame(cellData) == FALSE) {
+    if (is.list(cellData) == FALSE) {
       stop("Does not recognize the cellData input. Either provide one dataframe or a list() of dataframes.")
     }
     cellData <- lapply(cellData, function(x) turnEach(x, listPol))
-  }else{
+  } else {
     cellData <- turnEach(cellData, listPol)
   }
 
   return(list(dataTurn = dataTurn, cellData = cellData))
-
 }
 
 
-turnEach <- function(partCD, listPol){
-  if("spot"%in%colnames(partCD)){
+turnEach <- function(partCD, listPol) {
+  if ("spot" %in% colnames(partCD)) {
     dType <- "spot"
-    if(!"Lmid"%in%colnames(partCD)){
-      if(!"l"%in%colnames(partCD)){
+    if (!"Lmid" %in% colnames(partCD)) {
+      if (!"l" %in% colnames(partCD)) {
         stop("The spot dataframe does not contain relative localizations. Please add a spots_relative dataframe.")
       }
       partCD <- partCD %>%
         dplyr::rename(Lmid = .data$l, Dum = .data$d)
     }
   }
-  if("obID"%in%colnames(partCD)){
+  if ("obID" %in% colnames(partCD)) {
     dType <- "object"
   }
-  if("Xmid"%in%colnames(partCD)){
+  if ("Xmid" %in% colnames(partCD)) {
     dType <- "mesh"
   }
-  if(missing(dType)){
+  if (missing(dType)) {
     stop("Did not recognize the input dataframe in cellData.")
   }
 
-  if(!missing(listPol)){
+  if (!missing(listPol)) {
     partCD <- partCD %>%
       dplyr::right_join(listPol)
   }
 
 
-  if(dType == "spot"){
+  if (dType == "spot") {
     partCD <- partCD %>%
       dplyr::mutate(
-        Lmid = dplyr::if_else(.data$pol!=0, .data$Lmid*.data$pol, .data$Lmid, .data$Lmid),
+        Lmid = dplyr::if_else(.data$pol != 0, .data$Lmid * .data$pol, .data$Lmid, .data$Lmid),
       )
   }
-  if(dType == "object"){
+  if (dType == "object") {
     partCD <- partCD %>%
       dplyr::mutate(
-        Lmid = dplyr::if_else(.data$pol!=0, .data$Lmid*.data$pol, .data$Lmid, .data$Lmid),
-        ob_out_x = dplyr::if_else(.data$pol!=0, .data$ob_out_x*.data$pol, .data$ob_out_x, .data$ob_out_x)
+        Lmid = dplyr::if_else(.data$pol != 0, .data$Lmid * .data$pol, .data$Lmid, .data$Lmid),
+        ob_out_x = dplyr::if_else(.data$pol != 0, .data$ob_out_x * .data$pol, .data$ob_out_x, .data$ob_out_x)
       )
   }
-  if(dType == "mesh"){
+  if (dType == "mesh") {
     partCD <- partCD %>%
       dplyr::mutate(
-        X_rot = dplyr::if_else(.data$pol!=0, .data$X_rot*.data$pol, .data$X_rot, .data$X_rot),
-        Xrot_micron = dplyr::if_else(.data$pol!=0, .data$Xrot_micron*.data$pol, .data$Xrot_micron, .data$Xrot_micron)
+        X_rot = dplyr::if_else(.data$pol != 0, .data$X_rot * .data$pol, .data$X_rot, .data$X_rot),
+        Xrot_micron = dplyr::if_else(.data$pol != 0, .data$Xrot_micron * .data$pol, .data$Xrot_micron, .data$Xrot_micron)
       )
-    if("xt"%in%colnames(partCD)){
+    if ("xt" %in% colnames(partCD)) {
       partCD <- partCD %>%
         dplyr::mutate(
-          xt = dplyr::if_else(.data$pol!=0, .data$xt*.data$pol, .data$xt, .data$xt)
+          xt = dplyr::if_else(.data$pol != 0, .data$xt * .data$pol, .data$xt, .data$xt)
         )
     }
   }
 
   return(partCD)
-
 }
 
-polar_distance <- function(x,y) {
+
+
+
+
+
+polar_distance <- function(x, y) {
   return(sqrt(x^2 + y^2))
 }
 
-polar_angle <- function(x,y) {
-  return(atan(x/y))
+polar_angle <- function(x, y) {
+  return(atan(x / y))
 }
 
-rotate <- function(x, y, theta, type = "rad"){
+rotate <- function(x, y, theta, type = "rad") {
   theta <- switch(type,
     "rad" = theta,
-    "deg" = (pi/180) * theta,
-    "hour" = 0.2618 * theta)
-  new_x = x * cos(theta) - y * sin(theta)
-  new_y = x * sin(theta) + y * cos(theta)
-  return(data.frame(x = new_x, y = new_y))
+    "deg" = (pi / 180) * theta,
+    "hour" = 0.2618 * theta
+  )
+  rotated_x <- x * cos(theta) - y * sin(theta)
+  rotated_y <- x * sin(theta) + y * cos(theta)
+  return(data.frame(x = rotated_x, y = rotated_y))
+}
+
+st_rotate_around <- function(polygon, theta, around = sf::st_point(c(0, 0))) {
+  rotation_matrix <- matrix(c(cos(theta), sin(theta), -sin(theta), cos(theta)), 2, 2)
+  rotated_polygon <- ((polygon - around) * rotation_matrix) + around
+  colnames(rotated_polygon[[1]]) <- c("x", "y")
+  return(rotated_polygon)
 }
 
 
-retrive_phylogenies <- function(celllist) {
-  celllist %>%
-    mutate(parent = tail(ancestors, n = 1)) %>% 
-    filter(!is.na(ancestors)) %>% tibble()
-    mutate(
-      parent = if_else(is.na(tail(as.numeric(ancestors), n = 1)), 0, tail(as.numeric(ancestors), n = 1)),
-      child1 = as.numeric(descendants[1]),
-      child2 = as.numeric(descendants[2]),
-      root = 0) %>%
-    group_by(cell) %>%
-    mutate(death = max(frame)) %>%
-    rowwise() %>%
-    mutate(edgelength = death - birthframe) %>%
-    ungroup() -> celllist
-    
-    phylolist <- celllist %>% filter(death == birthframe) %>% getphylolist_SupSeg()
-    
-    if (isFALSE(ape::is.rooted.phylo(phylolist$generation_lists))) {
-      phylolist <- phylolist %>% filter(is.data.frame(generation_dataframes))
-      }
-    
-    if (length(cellList1$spots) > 1) {
-        message("Saving the relative spot localizations per phylogeny...")
-        if (is.data.frame(phylolist$generation_dataframes)) {
-          ph <- phylolist$generation_dataframes[,c("node", "cell", "frame", "parent", "child1", "child2", "death", "birthframe", "edgelength", "root", "nodelabel")]
-          phylolist <- merge(ph, spot_mesh[,,c("cell","frame", "max.length", "max.width", "spot", "totalspot", "Lmid", "pole1", "pole2", "Dum") ], all=T)
-        }
-        else {
-          phlist_allcells <- lapply(phylolist$generation_dataframes, function(x) x[,c("node", "cell", "frame", "parent", "child1", "child2", "death", "birthframe", "edgelength", "root", "nodelabel")])
-          MRTlist <- lapply(phlist_allcells, function(x) merge(x, spot_mesh[,c("cell","frame", "max.length", "max.width", "spot", "totalspot", "Lmid", "pole1", "pole2", "Dum")]), all=T)
-          phylolist$spot_relative_list <- MRTlist
-        }
-      }
-        message("Saving cell outlines per phylogeny...")
-    if(is.data.frame(phylolist$generation_dataframes)==FALSE){
-      Mlist <- lapply(phylolist$generation_dataframes, function(x) merge(x[,c("node", "cell", "frame", "parent", "child1", "child2", "death", "birthframe", "edgelength", "root", "nodelabel")], Mesh))
-    }
-    if(is.data.frame(phylolist$generation_dataframes)==TRUE){
-      Mlist <- merge(phylolist$generation_dataframes[,c("node", "cell", "frame", "parent", "child1", "child2", "death", "birthframe", "edgelength", "root", "nodelabel")], Mesh)
-    }
-    phylolist$meshdata <- Mlist
-    return(outlist)
+get_minimum_bounding_box_centroid_and_angle <- function(x, y) {
+  bounding_box <- shotGroups::getMinBBox(data.frame(point.x = x, point.y = y))
+  points <- as.matrix(bounding_box$pts)
+  points <- rbind(points, points[1, ])
+  centroid <- sf::st_polygon(list(points)) %>% sf::st_centroid()
+  return(list(centroid = centroid, angle = bounding_box$angle))
 }
 
 
-tibble(celllist) %>%
-  rowwise() %>%
-  mutate(
-    root = 0,
-    child1 = descendants[1],
-    child2 = descendants[2], 
-    parent = if_else(length(ancestors) > 0, ancestors[1], 0)) %>% 
-  select(-c(mesh, model, ancestors, descendants, divisions, box)) %>% 
-  mutate(across(everything(), as.numeric)) %>%
-  group_by(cell) %>%
-  mutate(death = max(frame)) %>%
-  ungroup() %>%
-  mutate(edgelength = death - birthframe) 
-  meshes %>% mutate(xdistL0 = x0 - lag(x0), ydistL0 = y0 - lag(y0), distL0 = polar_distance(xdistL0, ydistL0), angL0 = polar_angle(ydistL0, xdistL0), angd = polar_angle(ydist, xdist), anglength = pi-abs(angL0)-abs(angd), st 
-    eplength = sin(anglength)*distL0, length = sum(steplength, na.rm = TRUE))
+angle_from_horizontal <- function(..., type = "rad") {
+  result <- switch(type,
+    "rad" = pi,
+    "deg" = 180,
+    "hour" = 12
+  )
+  angles <- c(...)
+  for (theta in angles) {
+    result <- result - theta
+  }
+  return(result)
+}
 
-cleaned %>% filter(frame == death) %>% getphylolist_SupSeg() -> test
-  
-is.numeric(celllist$birthframe)
+angle_from_vertical <- function(..., type = "rad") {
+  result <- switch(type,
+    "rad" = pi / 2,
+    "deg" = 90,
+    "hour" = 6
+  )
+  angles <- c(...)
+  for (theta in angles) {
+    result <- result - theta
+  }
+  return(result)
+}
 
+st_polygon_autoclose <- function(x, y) {
+  if (first(x) != last(x) || first(y) != last(y)) {
+    x <- append(x, first(x))
+    y <- append(y, first(y))
+  }
+  return(sf::st_polygon(list(cbind(x = x, y = y))))
+}
 
-
-
+is_polygon_rotation_y_positive <- function(polygon, theta, around = sf::st_point(c(0, 0))) {
+  rotated_polygon <- st_rotate_around(polygon, theta, around)
+  return(rotated_polygon[[1]][1, "y"] > 0)
+}

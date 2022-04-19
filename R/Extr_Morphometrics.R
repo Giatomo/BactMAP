@@ -97,3 +97,51 @@ extr_Morphometrics <- function(morphpath, mag, turncells = TRUE, cellList=FALSE)
   return(listM)
 }
 
+
+
+
+max(unlist(purrr::map(x, \(x) length(x))))
+
+get_max_cell_length_col <- function(col) {
+  return(max(unlist(purrr::map(col, \(cell) length(cell)))))
+}
+
+
+
+purrr::imap(morph_mat_list$frame[2,1,], \(x, i) as_tibble(t(x[,1,])) %>% 
+  mutate(frame = i)) %>%
+  bind_rows() %>% 
+  mutate(across(
+    where(\(col) get_max_cell_length_col(col) == 1),
+    \(x) unlist(x))) %>% 
+  rowwise() %>%
+  mutate(across(
+    where(\(col) get_max_cell_length_col(col) > 1),
+    \(x) list(as.numeric(x)))) -> df
+
+
+df %>% mutate(mesh = list(tibble(Xcont, Ycont, cellID, area, pole1, pole2, frame))) %>% .$mesh %>% bind_rows() -> meshes
+
+meshes %>% 
+  group_by(frame, cellID) %>% 
+  mutate(
+    numpoint = row_number(),
+    x0 = if_else(
+      numpoint == pole1,
+      Xcont,
+      NA_real_),
+    x1 = if_else(
+      numpoint == pole2,
+      Xcont,
+      NA_real_),
+    y0 = if_else(
+      numpoint == pole1,
+      Ycont,
+      NA_real_),
+    y1 = if_else(
+      numpoint == pole2,
+      Ycont,
+      NA_real_)) %>%
+    fill(x0, x1, y0, y1, .direction = ("downup")) %>%
+    mutate(max.length = polar_distance(x0 - x1, y0-y1)) -> temp
+

@@ -137,35 +137,44 @@ extr_Oufti <- function(matfile, mag="No_PixelCorrection", phylo=FALSE, cellList=
   Mesh <- spotrXYMESH(Mesh)
   Mesh <- meshTurn(Mesh)
   ##pixel --> um
+
+  ######
   outlist$pixel2um <- unlist(get(magnificationList, envir=magEnv)[mag])
   Mesh$max_um <- Mesh$max.length*outlist$pixel2um
   Mesh$maxwum <- Mesh$max.width*outlist$pixel2um
   Mesh$Xrot_micron <- Mesh$X_rot*outlist$pixel2um
   Mesh$Yrot_micron <- Mesh$Y_rot*outlist$pixel2um
-  
-  if("signal1" %in% colnames(outlist$cellList)){
-    if(length(unique(outlist$signal1))>1){
+  ######
+
+
+  ######
+  if ("signal1" %in% colnames(outlist$cellList)) {
+    if (length(unique(outlist$signal1)) > 1) {
       outlist$cellList$mean.signal <- unlist(lapply(outlist$cellList$signal1, function(x) mean(x)))
       outlist$cellList$sd.signal <- unlist(lapply(outlist$cellList$signal1, function(x) stats::sd(x)))
-      Mesh <- merge(Mesh, outlist$cellList[,c("cell", "frame", "mean.signal", "sd.signal")])
-      meansignalList <- unique(Mesh[,c("cell", "frame", "max.width", "maxwum", "max.length", "max_um", "mean.signal", "sd.signal")])
+      Mesh <- merge(Mesh, outlist$cellList[, c("cell", "frame", "mean.signal", "sd.signal")])
+      meansignalList <- unique(Mesh[, c("cell", "frame", "max.width", "maxwum", "max.length", "max_um", "mean.signal", "sd.signal")])
       outlist$meansignalList <- meansignalList
     }
   }
-  
+  ######
   outlist$mesh <- Mesh
-  if("objectframe "%in% names(outlist)){
+
+
+  ######
+  if("objectframe" %in% names(outlist)){
     OM <- suppressWarnings(centrefun(OBJ))
     OM <- suppressWarnings(midobject(Mesh, OM, outlist$pixel2um))
-    OM <- OM %>%
-      dplyr::left_join(outlist$objectframe) %>%
+    OM <- OM |>
+      dplyr::left_join(outlist$objectframe) |>
       dplyr::mutate(obarea_um = .data$obarea * (outlist$pixel2um)^2,
                     oblength_um = .data$oblength * outlist$pixel2um,
                     obwidth_um = .data$obwidth * outlist$pixel2um)
     outlist$object_relative <- OM
   }
-  ##then take the spots
+  ######
 
+  ##then take the spots
   if(length(unique(cellList1$spots))>1){
     if(CSV==FALSE){
       message("Taking the spot coordinates and information per cell...")
@@ -182,6 +191,7 @@ extr_Oufti <- function(matfile, mag="No_PixelCorrection", phylo=FALSE, cellList=
     outlist$spots_relative <- spot_mesh[!is.na(spot_mesh$cell),]
   }
 
+  ############
   ##optional (default = OFF) add genealogy information as phylo objects.
   if(phylo == TRUE){
     if(length(cellList1$descendants)<=1){
@@ -232,3 +242,42 @@ extr_Oufti <- function(matfile, mag="No_PixelCorrection", phylo=FALSE, cellList=
   return(outlist)
 }
 
+
+
+# celllist |>
+#   group_by(cell) |> 
+#   mutate(
+#     parent = last(ancestors),
+#     child1 = descendants[1],
+#     child2 = descendants[2],
+#     death = max(frame),
+#     # lifespan = edgelength
+#     lifespan = death - birthframe,
+#     root = 0) |>
+#     filter(death == frame)  -> phylo
+
+# phylo |>
+#   filter(!is.na(parent)) |>
+#   group_by(root, cell) |>
+#   mutate(
+#     is_orphan = cell %!in% parent) |>
+#   arrange(desc(is_orphan)) |>
+#   mutate(edge2 = row_number()) |>
+#   ungroup() |>
+#   mutate(ntip = sum(is_orphan == TRUE))
+
+# CL <- cellList1[cellList1$frame==cellList1$death,]
+#     phylolist <- getphylolist_SupSeg(CL)
+
+
+
+# celllist |>
+#   group_by(cell) |> 
+#   mutate(
+#     parent = last(ancestors),
+#     child1 = descendants[1],
+#     child2 = descendants[2],
+#     death = max(frame),
+#     # lifespan = edgelength
+#     lifespan = death - birthframe,
+#     root = 0) -> cl
