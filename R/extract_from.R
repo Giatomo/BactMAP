@@ -28,7 +28,7 @@ read_super_segger <- function(matfile) {
 
   clist <- R.matlab::readMat(matfile)
   as_tibble(clist$data) -> cells
-  colnames(cells) <- janitor::make_clean_names(unlist(clist$def)) 
+  colnames(cells) <- janitor::make_clean_names(unlist(clist$def))
   cells |>
     select(any_of(lookup)) |>
     rename(any_of(lookup)) |>

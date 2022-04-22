@@ -865,11 +865,13 @@ rotate <- function(x, y, theta, type = "rad") {
   return(data.frame(x = rotated_x, y = rotated_y))
 }
 
-st_rotate_around <- function(polygon, theta, around = sf::st_point(c(0, 0))) {
+st_rotate_around <- function(geometry, theta, around = sf::st_point(c(0, 0))) {
   rotation_matrix <- matrix(c(cos(theta), sin(theta), -sin(theta), cos(theta)), 2, 2)
-  rotated_polygon <- ((polygon - around) * rotation_matrix) + around
-  colnames(rotated_polygon[[1]]) <- c("x", "y")
-  return(rotated_polygon)
+  rotated_geometry <- ((geometry - around) * rotation_matrix) + around
+  if (sf::st_geometry_type(rotated_geometry) == "POLYGON") {
+    colnames(rotated_geometry[[1]]) <- c("x", "y")
+  }
+  return(rotated_geometry)
 }
 
 
@@ -877,7 +879,7 @@ get_minimum_bounding_box_centroid_and_angle <- function(x, y) {
   bounding_box <- shotGroups::getMinBBox(data.frame(point.x = x, point.y = y))
   points <- as.matrix(bounding_box$pts)
   points <- rbind(points, points[1, ])
-  centroid <- sf::st_polygon(list(points)) %>% sf::st_centroid()
+  centroid <- sf::st_polygon(list(points)) |> sf::st_centroid()
   return(list(centroid = centroid, angle = bounding_box$angle))
 }
 
@@ -920,3 +922,87 @@ is_polygon_rotation_y_positive <- function(polygon, theta, around = sf::st_point
   rotated_polygon <- st_rotate_around(polygon, theta, around)
   return(rotated_polygon[[1]][1, "y"] > 0)
 }
+
+st_triangulate_circle <- function(center, radius, angle, bins, angle_unit = "rad") {
+  if(!missing(angle)) {
+    angle <- switch(angle_unit,
+    "rad" = angle,
+    "deg" = π/180 * angle)
+  }
+
+  angle_ <- switch(rlang::check_exclusive(angle, bins),
+    angle = angle,
+    bins = (2 * pi) / bins)
+
+  bins_ <- switch(rlang::check_exclusive(angle, bins),
+    angle = 2 * pi / angle,
+    bins = bins)
+
+  top_left_point <- st_rotate_around(center + sf::st_point(c(0, radius)), -angle_ / 2, around = center)
+
+  splits <- purrr::map(1:bins_, \(x) st_rotate_around(top_left_point, x * angle_, around = center))
+  angles <- c(1:bins_) * angle_
+
+  triangles <- tibble(point = splits, next_point = lead(splits, default = splits[1]), angle = angles) |>
+    rowwise() |>
+    mutate(triangle = list(sf::st_polygon(list(matrix(rbind(unlist(c(center, point, next_point, center))), ncol = 2))))) |>
+    select(angle, triangle)
+
+  return(st_sf(triangles))
+}
+
+get_points_inside_polygons <- function(raster, polygons_sf, join = st_within, left = FALSE) {
+  names(raster) <- "value"
+  points <- st_as_sf(as.points(raster))
+  points_inside <- st_join(points, polygons_sf, join = join, left = left) |> as_tibble() |> rename(point = geometry)
+  return(points_inside)
+}
+
+correct_position <- function(points_inside, point, angle, center) {
+  points_inside |>
+    rowwise() |>
+    mutate(
+      corrected_pos = list(st_rotate_around(st_point({{point}}[[1]]), -{{angle}}, center)),
+      x = round(pos_corr[[1]][1]),
+      y = round(pos_corr[[1]][2])) |>
+    select(-corrected_pos) -> corrected
+  return(corrected)
+}
+
+st_ring <- function(inner_radius, outer_radius, center = st_point(c(0, 0))) {
+  outer <- st_buffer(center, dist = outer_radius, endCapStyle="ROUND")
+  inner <- st_buffer(center, dist = inner_radius, endCapStyle="ROUND")
+  ring <- st_difference(outer, inner)
+  return(ring)
+}
+
+st_concentrics_rings <- function(max_radius, n, center =  st_point(c(0, 0))) {
+  size <- max_radius/n
+  steps <- seq(from = 0, to = max_radius, by = size)
+  rings <- tibble(
+    inner = steps[1:length(steps) - 1],
+    outer = steps[2:length(steps)]) 
+  rings |>
+    rowwise() |>
+    mutate(ring = list(st_ring(inner, outer, center))) |> st_sf() -> rings
+  return(rings)
+}
+
+
+# triangles <- st_triangulate_circle(center, 100, bins = 360)
+# rings <- st_concentrics_rings(100, 20, center = center)
+# triangles_inside <- get_points_inside_polygons(raster, triangles)
+# rings_inside <- get_points_inside_polygons(raster, rings)
+
+# merged <- inner_join(triangles_inside, rings_inside, by = (c("point" = "point", "value" = "value")))
+# merged |>
+#   group_by(angle, inner) |>
+#   summarise(value = mean(value)) |>
+#   ggplot() +
+#     geom_tile(
+#       aes(
+#         x = angle,
+#         y = inner,
+#         fill = value)) +
+#     scale_fill_viridis_c() +
+#     coord_polar()
