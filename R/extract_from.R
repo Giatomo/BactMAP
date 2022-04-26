@@ -1,5 +1,4 @@
-
-extract_celllist <- function(oufti_list) {
+extract_oufti_celllist <- function(oufti_list) {
   tibble(oufti_list$cellList[[2]]) |>
     unnest(everything()) |>
     rename(cell = 1) |>
@@ -20,21 +19,34 @@ extract_celllist <- function(oufti_list) {
   return(celllist)
 }
 
-
-read_super_segger <- function(matfile) {
-
+extract_supersegger_celllist <- function(supersegger_list) {
   lookup <- c('cell_id', 'cell_birth_time', 'cell_death_time', 'cell_age', 'fluor1_sum', 'fluor1_mean', 'fluor1_sum_death', 'fluor1_mean_death', 'fluor2_sum', 'fluor2_mean', 'fluor2_sum_death', 'fluor2_mean_death', 'mother_id', 'daughter1_id', 'daughter2_id')
   names(lookup) <- c("cell", "birth", "death", "edgelength", "fluorsum", "fluormean", "fluorsum_D", "fluormean_D", "fluorsum2", "fluormean2", "fluorsum_D2", "fluormean_D2", "parent", "child1", "child2")
-
-  clist <- R.matlab::readMat(matfile)
-  as_tibble(clist$data) -> cells
-  colnames(cells) <- janitor::make_clean_names(unlist(clist$def))
-  cells |>
+  
+  as_tibble(supersegger_list$data) -> cell_list
+  colnames(cell_list) <- janitor::make_clean_names(unlist(supersegger_list$def))
+  cell_list |>
     select(any_of(lookup)) |>
     rename(any_of(lookup)) |>
     mutate(
       parent = if_else(is.na(parent), 0, parent)
-    ) -> cells
+    ) -> cell_list
+  
+}
+
+read_oufti <- function(oufti_matfile){
+  oufti_matfile |>
+    R.matlab::readMat(oufti_matfile) |>
+    extract_oufti_celllist() -> cell_list
+  return(cell_list)
+}
+
+read_supersegger <- function(supersegger_matfile) {
+  supersegger_matfile |> 
+    R.matlab::readMat()
+    extract_supersegger_celllist() -> cell_list
+  
+  return(cell_list)
 }
 
 
@@ -47,7 +59,6 @@ extract_mesh <- function(celllist) {
     rotate_polygons(cell_polygon) -> meshes
   return(meshes)
 }
-
 
 unnest_cell_meshes <- function(celllist, mesh, cell, frame) {
   celllist |>
