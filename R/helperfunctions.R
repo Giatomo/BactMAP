@@ -883,6 +883,13 @@ get_minimum_bounding_box_centroid_and_angle <- function(x, y) {
   return(list(centroid = centroid, angle = bounding_box$angle))
 }
 
+st_minimum_bounding_box <- function(polygon) {
+  polygon_df <- polygon |> as.matrix() |> as_tibble() |> rename(c(point.x = x, point.y = y))
+  bounding_box_data <- shotGroups::getMinBBox(polygon_df)
+  bonding_box_polygon <- st_polygon_autoclose(bounding_box_data$pts[,"x"], bounding_box_data$pts[,"y"])
+  return(tibble(polygon = list(bonding_box_polygon), angle = bounding_box_data$angle))
+}
+
 
 angle_from_horizontal <- function(..., type = "rad") {
   result <- switch(type,

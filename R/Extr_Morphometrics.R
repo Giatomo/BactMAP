@@ -11,6 +11,36 @@
 ## Dependencies:
 # library(R.matlab)
 
+extract_morphometrics <- function(morphometrics_list) {
+ morphometrics_list |> 
+  as_tibble() |>
+  mutate(across(where(\(x) length(dim(x)) == 2 && dim(x)[2] == 1), \(x) c(x))) -> temp
+purrr::map(temp$frame, \(x) as_tibble(t(data.frame(x)))) -> temp
+
+temp[[2]] |>
+  rowwise() |> 
+  mutate(
+    across(c(Xcent, Ycent, area, theta, bw.label, cellID, circularity, pole1, pole2, num.pts, Xcent.cont, Ycent.cont,theta.cont), \(x) c(x)),
+    mesh_cont = list(st_polygon_autoclose(Xcont, Ycont)),
+    mesh_perim = list(st_polygon_autoclose(Xperim, Yperim))) |> 
+  select(-c(Xcont, Ycont, Xperim, Yperim)) |>
+  st_sf() -> cell_list
+
+  return(cell_list)
+}
+
+read_morphometrics <- function(morphometrics_path){
+  morphometrics_list <- R.matlab::readMat(morphometrics_path)
+  cell_list <- extract_morphometrics(morphometrics_list)
+  return(cell_list)
+}
+
+
+cell_list |> ggplot() +
+    geom_sf(aes(fill = as.factor(bw.label))) +
+    theme(legend.position="none")
+    
+
 
 extr_Morphometrics_cellList <- function(morphpath, areacutoff = 24) {
   if (!requireNamespace("R.matlab", quietly = TRUE)) {
@@ -99,59 +129,54 @@ extr_Morphometrics <- function(morphpath, mag, turncells = TRUE, cellList = FALS
 }
 
 
-
-
-max(unlist(purrr::map(x, \(x) length(x))))
-
-get_max_cell_length_col <- function(col) {
-  return(max(unlist(purrr::map(col, \(cell) length(cell)))))
-}
+# get_max_cell_length_col <- function(col) {
+#   return(max(unlist(purrr::map(col, \(cell) length(cell)))))
+# }
 
 
 
-purrr::imap(morph_mat_list$frame[2, 1, ], \(x, i) as_tibble(t(x[, 1, ])) %>%
-  mutate(frame = i)) %>%
-  bind_rows() %>%
-  mutate(across(
-    where(\(col) get_max_cell_length_col(col) == 1),
-    \(x) unlist(x)
-  )) %>%
-  rowwise() %>%
-  mutate(across(
-    where(\(col) get_max_cell_length_col(col) > 1),
-    \(x) list(as.numeric(x))
-  )) -> df
+# purrr::imap(morpholist$frame[2, 1, ], \(x, i) as_tibble(t(x[, 1, ])) %>% mutate(frame = i)) %>%
+#   bind_rows() %>%
+#   mutate(across(
+#     where(\(col) get_max_cell_length_col(col) == 1),
+#     \(x) unlist(x)
+#   )) %>%
+#   rowwise() %>%
+#   mutate(across(
+#     where(\(col) get_max_cell_length_col(col) > 1),
+#     \(x) list(as.numeric(x))
+#   )) -> df
 
 
-df %>%
-  mutate(mesh = list(tibble(Xcont, Ycont, cellID, area, pole1, pole2, frame))) %>%
-  .$mesh %>%
-  bind_rows() -> meshes
+# df %>%
+#   mutate(mesh = list(tibble(Xcont, Ycont, cellID, area, pole1, pole2, frame))) %>%
+#   .$mesh %>%
+#   bind_rows() -> meshes
 
-meshes %>%
-  group_by(frame, cellID) %>%
-  mutate(
-    numpoint = row_number(),
-    x0 = if_else(
-      numpoint == pole1,
-      Xcont,
-      NA_real_
-    ),
-    x1 = if_else(
-      numpoint == pole2,
-      Xcont,
-      NA_real_
-    ),
-    y0 = if_else(
-      numpoint == pole1,
-      Ycont,
-      NA_real_
-    ),
-    y1 = if_else(
-      numpoint == pole2,
-      Ycont,
-      NA_real_
-    )
-  ) %>%
-  fill(x0, x1, y0, y1, .direction = ("downup")) %>%
-  mutate(max.length = polar_distance(x0 - x1, y0 - y1)) -> temp
+# meshes %>%
+#   group_by(frame, cellID) %>%
+#   mutate(
+#     numpoint = row_number(),
+#     x0 = if_else(
+#       numpoint == pole1,
+#       Xcont,
+#       NA_real_
+#     ),
+#     x1 = if_else(
+#       numpoint == pole2,
+#       Xcont,
+#       NA_real_
+#     ),
+#     y0 = if_else(
+#       numpoint == pole1,
+#       Ycont,
+#       NA_real_
+#     ),
+#     y1 = if_else(
+#       numpoint == pole2,
+#       Ycont,
+#       NA_real_
+#     )
+#   ) %>%
+#   fill(x0, x1, y0, y1, .direction = ("downup")) %>%
+#   mutate(max.length = polar_distance(x0 - x1, y0 - y1)) -> temp

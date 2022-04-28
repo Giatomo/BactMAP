@@ -317,7 +317,27 @@ plotRaw <- function(tiffdata,
 
 
 
-st_box <- function(left, right, top, bot) {
+st_box <- function(left, right, top, bot, center = NULL, width = NULL, height = NULL) {
+  if (!missing(center)) {
+    if (missing(width) | missing(height)) {
+      stop("you need to provide 'width' and 'height' arguments when using 'center' argument")
+    }
+    if (missing(left) | missing(right)) {
+      stop("you need to provide 'width' and 'height' arguments when using 'center' argument")
+    }
+    left <- center - width/2
+    right <- center + width/2
+    bot <- center - height/2
+    top <- center + height/2
+  }
+  if (xor(missing(top) | missing(right), (missing(width) | missing(heigth)))) {
+    stop("you need to provide 'width' and 'height' OR 'top' arguments when using 'left' and bot argument")
+    }
+  if (missing(top) | missing(right)) {
+    right <- left + width
+    top <- bot + heigth
+  }
+  
   points <- matrix(c(right, top, left, top, left, bot, right, bot, right, top), ncol = 2, byrow = TRUE)
   return(st_polygon(list(points)))
 }

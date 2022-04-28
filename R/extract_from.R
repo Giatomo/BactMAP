@@ -14,7 +14,20 @@ extract_oufti_celllist <- function(oufti_list) {
     unnest_longer(c(celldata, cell)) |>
     unnest(celldata) |>
     unnest_wider(celldata) |>
-    mutate(across(where(\(x) length(dim(x)) == 2 && dim(x)[2] == 1), \(x) c(x))) -> celllist
+    mutate(
+      across(where(\(x) length(dim(x)) == 2 && dim(x)[2] == 1), \(x) c(x)),
+      box = st_box(bot = box[,2], top = box[,4]+ box[,2], left = box[,1], right = box[,1]+box[,3])) -> cell_list
+    
+  cell_list |>
+    select(frame, cell, mesh) |> 
+    unnest_cell_meshes(mesh) |> 
+    get_cell_max_length_and_width(x0, y0, x1, y1, c(cell, frame)) |> 
+    pivot_xy_longer(c(x0, x1, y0, y1), num, n) |> 
+    summarise(
+      mesh = list(st_polygon_autoclose(x, y)),
+      max.length = mean(max.length),
+      max.width= mean(max.width)) -> meshes
+    inner_join(cell_list, meshes, by = c("frame" = "frame", "cell" = "cell")) -> cell_list
 
   return(celllist)
 }
@@ -38,12 +51,14 @@ read_oufti <- function(oufti_matfile){
   oufti_matfile |>
     R.matlab::readMat(oufti_matfile) |>
     extract_oufti_celllist() -> cell_list
+
+    
   return(cell_list)
 }
 
 read_supersegger <- function(supersegger_matfile) {
   supersegger_matfile |> 
-    R.matlab::readMat()
+    R.matlab::readMat() |>
     extract_supersegger_celllist() -> cell_list
   
   return(cell_list)
@@ -55,27 +70,23 @@ extract_mesh <- function(celllist) {
     unnest_cell_meshes(mesh, cell, frame) |>
     get_cell_max_length_and_width(x0, x1, y0, y1, c(cell, frame)) |>
     pivot_xy_longer(c(x0, y0, x1, y1), num, n) |>
-    polygonize_and_get_centroids(x, y,  c(cell, frame)) |>
-    rotate_polygons(cell_polygon) -> meshes
   return(meshes)
 }
 
-unnest_cell_meshes <- function(celllist, mesh, cell, frame) {
+
+unnest_cell_meshes <- function(celllist, mesh) {
   celllist |>
     rowwise() |>
     filter(length({{mesh}}) >= 4) |>
-    mutate(mesh = list(tidy_mesh_dataframe({{mesh}}, cell, frame))) |>
-    select({{mesh}}) |>
+    mutate(mesh = list(tidy_oufti_mesh({{mesh}}))) |>
     unnest({{mesh}}) -> meshes
   return(meshes)
 }
 
-tidy_mesh_dataframe <- function(mesh, cell, frame) {
+tidy_oufti_mesh <- function(mesh) {
   as_tibble(mesh) |>
     rename(x0 = 1, y0 = 2, x1 = 3, y1 = 4) |>
     mutate(
-        cell = {{cell}},
-        frame = {{frame}},
         num = 0:(nrow(mesh) - 1)
       ) -> mesh
   return(mesh)
@@ -114,7 +125,7 @@ get_cell_max_length_and_width <- function(meshlist, x0, y0, x1, y1, .group) {
     mutate(
       length = cumsum(steplength),
       max.length = sum(steplength)) |>
-      select(-c(xdist, ydist, xdistL0, ydistL0, distL0, angL0, angd)) -> meshlist
+      select(-c(xdist, ydist, xdistL0, ydistL0, distL0, angL0, angd, anglength, steplength, length)) -> meshlist
   return(meshlist)
 }
 
@@ -148,6 +159,24 @@ polygonize_and_get_centroids <- function(meshlist, x, y, .group) {
   return(meshlist)
 }
 
+polygonize_and_get_centroids <- function(meshlist, x, y, .group) {
+  meshlist |>
+    group_by(across({{.group}}))  |>
+    summarise(
+      cell_polygon = list(st_polygon_autoclose(x = {{x}}, y = {{y}})),
+      bounding_box_angle_centroid = list(get_minimum_bounding_box_centroid_and_angle({{x}}, {{y}}))) |>
+    rowwise() |>
+    mutate(
+      bounding_box_centroid = list(bounding_box_angle_centroid[["centroid"]]),
+      bounding_box_angle = (180 - bounding_box_angle_centroid[["angle"]]) * pi / 180,
+      angle = if_else(is_polygon_rotation_y_positive(cell_polygon, bounding_box_angle, bounding_box_centroid), bounding_box_angle + pi, bounding_box_angle),
+      cell_centroid = list(sf::st_centroid(cell_polygon)),
+      area = sf::st_area(cell_polygon)) |>
+    select(-c(bounding_box_angle_centroid)) -> meshlist
+  return(meshlist)
+}
+
+
 rotate_polygons <- function(meshlist, polygon, angle, around) {
   meshlist |>
     mutate(
@@ -157,7 +186,7 @@ rotate_polygons <- function(meshlist, polygon, angle, around) {
       
     
 
-center_and_rotate_meshes <- function(meshlist, polygon, .group) {
+center_and_rotate_meshes <- function(meshlist, x, y, .group) {
   meshlist |>
     group_by(across({{.group}}))  |>
     mutate(cell_polygon = list(st_polygon_autoclose(x = {{x}}, y = {{y}})),
@@ -169,7 +198,7 @@ center_and_rotate_meshes <- function(meshlist, polygon, .group) {
            bounding_box_centroid = list(bounding_box_angle_centroid[["centroid"]]),
            angle = (180 - bounding_box_angle_centroid[["angle"]]) * pi / 180,
            x_mid = bounding_box_centroid[1],
-           y_mid = bounding_box_centroid[2],
+           y_mid = bounding_box_centroid[2],<
            x_centered = {{x}} - x_mid,
            y_centered = {{y}} - y_mid) |>
     group_by(across({{.group}}))  |>
@@ -189,7 +218,8 @@ pivot_xy_longer <- function(celllist, .xy_cols, num, n) {
     celllist |> 
     pivot_longer({{.xy_cols}}, names_to = c(".value", "XY"), names_pattern = "(.)(.)") |>
     mutate({{num}} := if_else(XY == 1, {{n}} - {{num}}, {{num}})) |>
-    arrange(XY, {{num}}) -> celllist
+    arrange(XY, {{num}}) |>
+    select(-c(XY))-> celllist
     return(celllist)
 }
 
