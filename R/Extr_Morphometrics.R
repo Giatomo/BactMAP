@@ -11,29 +11,6 @@
 ## Dependencies:
 # library(R.matlab)
 
-extract_morphometrics <- function(morphometrics_list) {
- morphometrics_list |> 
-  as_tibble() |>
-  mutate(across(where(\(x) length(dim(x)) == 2 && dim(x)[2] == 1), \(x) c(x))) -> temp
-purrr::map(temp$frame, \(x) as_tibble(t(data.frame(x)))) -> temp
-
-temp[[2]] |>
-  rowwise() |> 
-  mutate(
-    across(c(Xcent, Ycent, area, theta, bw.label, cellID, circularity, pole1, pole2, num.pts, Xcent.cont, Ycent.cont,theta.cont), \(x) c(x)),
-    mesh_cont = list(st_polygon_autoclose(Xcont, Ycont)),
-    mesh_perim = list(st_polygon_autoclose(Xperim, Yperim))) |> 
-  select(-c(Xcont, Ycont, Xperim, Yperim)) |>
-  st_sf() -> cell_list
-
-  return(cell_list)
-}
-
-read_morphometrics <- function(morphometrics_path){
-  morphometrics_list <- R.matlab::readMat(morphometrics_path)
-  cell_list <- extract_morphometrics(morphometrics_list)
-  return(cell_list)
-}
 
 
 cell_list |> ggplot() +

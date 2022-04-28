@@ -1,3 +1,21 @@
+unnest_cell_meshes <- function(celllist, mesh) {
+  celllist |>
+    rowwise() |>
+    filter(length({{mesh}}) >= 4) |>
+    mutate(mesh = list(tidy_oufti_mesh({{mesh}}))) |>
+    unnest({{mesh}}) -> meshes
+  return(meshes)
+}
+
+tidy_oufti_mesh <- function(mesh) {
+  as_tibble(mesh) |>
+    rename(x0 = 1, y0 = 2, x1 = 3, y1 = 4) |>
+    mutate(
+        num = 0:(nrow(mesh) - 1)
+      ) -> meshes
+  return(meshes)
+}
+
 extract_oufti_celllist <- function(oufti_list) {
   tibble(oufti_list$cellList[[2]]) |>
     unnest(everything()) |>
@@ -14,10 +32,11 @@ extract_oufti_celllist <- function(oufti_list) {
     unnest_longer(c(celldata, cell)) |>
     unnest(celldata) |>
     unnest_wider(celldata) |>
-    mutate(
-      across(where(\(x) length(dim(x)) == 2 && dim(x)[2] == 1), \(x) c(x)),
-      box = st_box(bot = box[,2], top = box[,4]+ box[,2], left = box[,1], right = box[,1]+box[,3])) -> cell_list
-    
+    mutate(across(where(\(x) length(dim(x)) == 2 && dim(x)[2] == 1), \(x) c(x))) |>
+    rowwise() |>
+    mutate(box = list(st_box(bot = box[,2], height = box[,4], left = box[,1], width = box[,3]))) |> 
+    select(-model) -> cell_list
+
   cell_list |>
     select(frame, cell, mesh) |> 
     unnest_cell_meshes(mesh) |> 
@@ -26,11 +45,35 @@ extract_oufti_celllist <- function(oufti_list) {
     summarise(
       mesh = list(st_polygon_autoclose(x, y)),
       max.length = mean(max.length),
-      max.width= mean(max.width)) -> meshes
-    inner_join(cell_list, meshes, by = c("frame" = "frame", "cell" = "cell")) -> cell_list
+      max.width = mean(max.width)) -> meshes
 
-  return(celllist)
+    cell_list |> 
+    select(-c(mesh)) |>
+      inner_join(meshes, by = c("frame" = "frame", "cell" = "cell")) |>
+      st_sf(sf_column_name = "mesh") -> cell_list
+
+  return(cell_list)
 }
+
+
+extract_morphometrics <- function(morphometrics_list) {
+ morphometrics_list |> 
+  as_tibble() |>
+  mutate(across(where(\(x) length(dim(x)) == 2 && dim(x)[2] == 1), \(x) c(x))) -> temp
+purrr::map(temp$frame, \(x) as_tibble(t(data.frame(x)))) -> temp
+
+temp[[2]] |>
+  rowwise() |> 
+  mutate(
+    across(c(Xcent, Ycent, area, theta, bw.label, cellID, circularity, pole1, pole2, num.pts, Xcent.cont, Ycent.cont,theta.cont), \(x) c(x)),
+    mesh_cont = list(st_polygon_autoclose(Xcont, Ycont)),
+    mesh_perim = list(st_polygon_autoclose(Xperim, Yperim))) |> 
+  select(-c(Xcont, Ycont, Xperim, Yperim)) |>
+  st_sf() -> cell_list
+
+  return(cell_list)
+}
+
 
 extract_supersegger_celllist <- function(supersegger_list) {
   lookup <- c('cell_id', 'cell_birth_time', 'cell_death_time', 'cell_age', 'fluor1_sum', 'fluor1_mean', 'fluor1_sum_death', 'fluor1_mean_death', 'fluor2_sum', 'fluor2_mean', 'fluor2_sum_death', 'fluor2_mean_death', 'mother_id', 'daughter1_id', 'daughter2_id')
@@ -47,50 +90,34 @@ extract_supersegger_celllist <- function(supersegger_list) {
   
 }
 
-read_oufti <- function(oufti_matfile){
-  oufti_matfile |>
-    R.matlab::readMat(oufti_matfile) |>
-    extract_oufti_celllist() -> cell_list
+# segger_files |> 
+#   purrr::map(\(x) extract_supersegger_mesh(R.matlab::readMat(x))) |> 
+#   bind_rows() -> all_cells
 
-    
-  return(cell_list)
-}
-
-read_supersegger <- function(supersegger_matfile) {
-  supersegger_matfile |> 
-    R.matlab::readMat() |>
-    extract_supersegger_celllist() -> cell_list
-  
-  return(cell_list)
-}
-
-
-extract_mesh <- function(celllist) {
-  celllist |>
-    unnest_cell_meshes(mesh, cell, frame) |>
-    get_cell_max_length_and_width(x0, x1, y0, y1, c(cell, frame)) |>
-    pivot_xy_longer(c(x0, y0, x1, y1), num, n) |>
-  return(meshes)
-}
-
-
-unnest_cell_meshes <- function(celllist, mesh) {
-  celllist |>
-    rowwise() |>
-    filter(length({{mesh}}) >= 4) |>
-    mutate(mesh = list(tidy_oufti_mesh({{mesh}}))) |>
-    unnest({{mesh}}) -> meshes
-  return(meshes)
-}
-
-tidy_oufti_mesh <- function(mesh) {
-  as_tibble(mesh) |>
-    rename(x0 = 1, y0 = 2, x1 = 3, y1 = 4) |>
-    mutate(
-        num = 0:(nrow(mesh) - 1)
-      ) -> mesh
+extract_supersegger_mesh <- function(suppersegger_list) {
+  suppersegger_list$CellA[[1]][[1]][,,1] -> temp
+  mesh <- terra::rast(temp$mask) |> 
+    terra::flip(direction="horizontal") |>
+    as.polygons() |>
+    terra::shift(dx = temp$r.offset[,1], dy = temp$r.offset[,2]) |>
+    st_as_sf() |>
+    rename(value = lyr.1) |>
+    filter(value > 0)
   return(mesh)
 }
+
+
+
+
+
+# extract_mesh <- function(cell_list) {
+#   cell_list |>
+#     unnest_cell_meshes(mesh, cell, frame) |>
+#     get_cell_max_length_and_width(x0, x1, y0, y1, c(cell, frame)) |>
+#     pivot_xy_longer(c(x0, y0, x1, y1), num, n) |>
+#   return(meshes)
+# }
+
 
 get_cell_max_length_and_width <- function(meshlist, x0, y0, x1, y1, .group) {
   meshlist |>
@@ -130,17 +157,17 @@ get_cell_max_length_and_width <- function(meshlist, x0, y0, x1, y1, .group) {
 }
 
 
-add_mesh_pixel_to_unit_conversion <- function(meshlist, pixel_to_unit_ratio, unit) {
-  meshlist |>
-    mutate(
-      max_length_unit = max.length * pixel_to_unit_ratio,
-      max_width_unit = max.width * pixel_to_unit_ratio,
-      x_rotated_unit = x_rotated * pixel_to_unit_ratio,
-      y_rotated_unit = y_rotated * pixel_to_unit_ratio,
-      ratio = pixel_to_unit_ratio,
-      unit = unit) -> meshlist
-    return(meshlist)
-}
+# add_mesh_pixel_to_unit_conversion <- function(meshlist, pixel_to_unit_ratio, unit) {
+#   meshlist |>
+#     mutate(
+#       max_length_unit = max.length * pixel_to_unit_ratio,
+#       max_width_unit = max.width * pixel_to_unit_ratio,
+#       x_rotated_unit = x_rotated * pixel_to_unit_ratio,
+#       y_rotated_unit = y_rotated * pixel_to_unit_ratio,
+#       ratio = pixel_to_unit_ratio,
+#       unit = unit) -> meshlist
+#     return(meshlist)
+# }
 
 polygonize_and_get_centroids <- function(meshlist, x, y, .group) {
   meshlist |>
@@ -176,15 +203,16 @@ polygonize_and_get_centroids <- function(meshlist, x, y, .group) {
   return(meshlist)
 }
 
+# stack_meshes <- function(cell_list, mesh, angle, around, offset) {
+#   cell_list |> 
+#     rowwise() |>
+#     mutate({{meshes}} := center_and_orient_mesh({{meshes}}, {{angles}}, {{around}}, {{offset}})) -> cell_list
+#   return(cell_list)
+# }
 
-rotate_polygons <- function(meshlist, polygon, angle, around) {
-  meshlist |>
-    mutate(
-      rotated_polygon = list(st_rotate_around(polygon = {{polygon}}, theta = {{angle}}, around = {{around}}))) -> meshlist
-  return(meshlist)
+center_and_orient_mesh <- function(mesh, angle = 0, around = sf::st_centroid(mesh), offset = sf::st_point(c(0,0))) {
+  return(st_rotate_around(mesh, angle, around) - offset)
 }
-      
-    
 
 center_and_rotate_meshes <- function(meshlist, x, y, .group) {
   meshlist |>
@@ -198,7 +226,7 @@ center_and_rotate_meshes <- function(meshlist, x, y, .group) {
            bounding_box_centroid = list(bounding_box_angle_centroid[["centroid"]]),
            angle = (180 - bounding_box_angle_centroid[["angle"]]) * pi / 180,
            x_mid = bounding_box_centroid[1],
-           y_mid = bounding_box_centroid[2],<
+           y_mid = bounding_box_centroid[2],
            x_centered = {{x}} - x_mid,
            y_centered = {{y}} - y_mid) |>
     group_by(across({{.group}}))  |>
@@ -215,11 +243,11 @@ center_and_rotate_meshes <- function(meshlist, x, y, .group) {
 }
 
 pivot_xy_longer <- function(celllist, .xy_cols, num, n) {
-    celllist |> 
+  celllist |>
     pivot_longer({{.xy_cols}}, names_to = c(".value", "XY"), names_pattern = "(.)(.)") |>
     mutate({{num}} := if_else(XY == 1, {{n}} - {{num}}, {{num}})) |>
     arrange(XY, {{num}}) |>
-    select(-c(XY))-> celllist
+    select(-c(XY)) -> celllist
     return(celllist)
 }
 

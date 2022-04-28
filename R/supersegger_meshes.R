@@ -26,7 +26,7 @@ celmask <- function(matf, n, b){
   ras <- matf$CellA[[n]][[1]][[4]]
   ras[ras==0] <- NA
   ras <- raster::raster(ras,
-                        xmn=min(matf$CellA[[n]][[1]][[2]]),
+                        xmn = min(matf$CellA[[n]][[1]][[2]]),
                         xmx = max(matf$CellA[[n]][[1]][[2]]),
                         ymn = min(matf$CellA[[n]][[1]][[3]]),
                         ymx = max(matf$CellA[[n]][[1]][[3]])
@@ -36,6 +36,17 @@ celmask <- function(matf, n, b){
   rasp$frame <- (n-1+as.numeric(b))
   return(rasp)
 }
+segger_files <- fs::path("/home/thomas/comparing-segmentation/FigS2/SgmentationTest.Jun/SuperSegger/xy1/cell/") |> fs::dir_ls(glob = "*.mat")
+segger_files[[21]] |> R.matlab::readMat() -> mat
+mat$CellA[[1]][[1]][,,1] -> temp
+
+
+
+
+
+
+
+
 
 getallmaskstime <- function(matf){
   if((matf$death-matf$birth)>0){
@@ -49,7 +60,7 @@ getallmaskstime <- function(matf){
 }
 
 #getting a list of length x (amount of cells) containing the cell mask for each cell (y)
-getallmasks <- function(matlist){
+getallmasks <- function(matlist) {
   matlength <- length(matlist)
   celmasklist <- lapply(1:matlength, function(x) lapply(matlist[[x]], function(y) getallmaskstime(y)))
   return(celmasklist)
@@ -166,15 +177,7 @@ extr_SuperSeggerCells <- function(loc, frames, mag, timelapse=FALSE, startframe=
     if(is.numeric(unlist(get(magnificationList,envir=magEnv)[mag]))==FALSE){
       stop("Magnification conversion factor not recognized. Please use addPixels2um('pixelName', pixelsize) to add your conversion factor")
     }
-    finalframe$mesh$Yrot_micron <- finalframe$mesh$Y_rot * unlist(get(magnificationList,envir=magEnv)[mag])
-    finalframe$mesh$Xrot_micron <- finalframe$mesh$X_rot * unlist(get(magnificationList,envir=magEnv)[mag])
-    finalframe$mesh$max_um <- finalframe$mesh$max.length* unlist(get(magnificationList, envir=magEnv)[mag])
-    finalframe$mesh$maxwum <- finalframe$mesh$max.width *  unlist(get(magnificationList, envir=magEnv)[mag])
-    finalframe$mesh$area_um <- finalframe$mesh$area *  unlist(get(magnificationList, envir=magEnv)[mag])^2
-    finalframe$pixel2um <- unlist(get(magnificationList,envir=magEnv)[mag])
-  }
-  if(missing(mag)){
-    finalframe$pixel2um <- c("No_PixelCorrection" = 1)
-  }
-  return(finalframe)
-}
+    finalframe$mesh$Yrot_micron <- finalframe$mesh$Y_rot * unlist(get(magnificationList, envir = magEnv)[mag])
+    finalframe$mesh$Xrot_micron <- finalframe$mesh$X_rot * unlist(get(magnificationList, envir = magEnv)[mag])
+    finalframe$mesh$max_um <- finalframe$mesh$max.length * unlist(get(magnificationList, envir = magEnv)[mag])
+    finalframe$mesh$maxwum <- finalfvertical

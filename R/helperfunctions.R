@@ -995,6 +995,33 @@ st_concentrics_rings <- function(max_radius, n, center =  st_point(c(0, 0))) {
   return(rings)
 }
 
+st_box <- function(left, right, top, bot, center, width, height) {
+  if (!missing(center)) {
+    if (missing(width) | missing(height)) {
+      stop("you need to provide 'width' and 'height' arguments when using 'center' argument")
+    }
+    if (missing(left) | missing(right)) {
+      stop("you need to provide 'width' and 'height' arguments when using 'center' argument")
+    }
+    left <- center - width/2
+    right <- center + width/2
+    bot <- center - height/2
+    top <- center + height/2
+  }
+  else {
+    
+    if (!xor(missing(top) | missing(right), missing(width) | missing(height))) {
+      stop("you need to provide 'width' and 'height' OR 'top' arguments when using 'left' and bot argument")
+      }
+    if (missing(top) | missing(right)) {
+      right <- left + width
+      top <- bot + height
+    }
+  }
+
+  points <- matrix(c(right, top, left, top, left, bot, right, bot, right, top), ncol = 2, byrow = TRUE)
+  return(st_polygon(list(points)))
+}
 
 # triangles <- st_triangulate_circle(center, 100, bins = 360)
 # rings <- st_concentrics_rings(100, 20, center = center)
