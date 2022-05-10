@@ -868,11 +868,12 @@ rotate <- function(x, y, theta, type = "rad") {
 st_rotate_around <- function(geometry, theta, around = sf::st_point(c(0, 0))) {
   rotation_matrix <- matrix(c(cos(theta), sin(theta), -sin(theta), cos(theta)), 2, 2)
   rotated_geometry <- ((geometry - around) * rotation_matrix) + around
-  if (sf::st_geometry_type(rotated_geometry) == "POLYGON") {
-    colnames(rotated_geometry[[1]]) <- c("x", "y")
-  }
+  # if (sf::st_geometry_type(rotated_geometry) == "POLYGON") {
+  #   colnames(rotated_geometry[[1]]) <- c("x", "y")
+  # }
   return(rotated_geometry)
 }
+
 
 
 get_minimum_bounding_box_centroid_and_angle <- function(x, y) {
@@ -884,11 +885,20 @@ get_minimum_bounding_box_centroid_and_angle <- function(x, y) {
 }
 
 st_minimum_bounding_box <- function(polygon) {
-  polygon_df <- polygon |> as.matrix() |> as_tibble() |> rename(c(point.x = x, point.y = y))
+  polygon_df <- polygon |> 
+    unlist() |>
+    matrix(ncol = 2) |>
+    as_tibble() |>
+    rename(c("point.x" = 1, "point.y" = 2))
   bounding_box_data <- shotGroups::getMinBBox(polygon_df)
   bonding_box_polygon <- st_polygon_autoclose(bounding_box_data$pts[,"x"], bounding_box_data$pts[,"y"])
-  return(tibble(polygon = list(bonding_box_polygon), angle = bounding_box_data$angle))
+  return(list(polygon = list(bonding_box_polygon), angle = bounding_box_data$angle))
 }
+
+
+
+
+
 
 
 angle_from_horizontal <- function(..., type = "rad") {
@@ -995,18 +1005,21 @@ st_concentrics_rings <- function(max_radius, n, center =  st_point(c(0, 0))) {
   return(rings)
 }
 
-st_box <- function(left, right, top, bot, center, width, height) {
+st_box <- function(left, right, top, bot, center, width, height, angle = 0) {
   if (!missing(center)) {
-    if (missing(width) | missing(height)) {
-      stop("you need to provide 'width' and 'height' arguments when using 'center' argument")
+    if (!missing(width) & !missing(height)) {
+      left <- center[1] - width/2
+      right <- center[1] +  width/2
+      bot <- center[2] - height/2
+      top <- center[2] + height/2
     }
-    if (missing(left) | missing(right)) {
-      stop("you need to provide 'width' and 'height' arguments when using 'center' argument")
+    else if (!missing(left) & !missing(right)) {
+      right <- center[1] + (center-left)/2
+      top <- center[2] + (center-bot)/2
     }
-    left <- center - width/2
-    right <- center + width/2
-    bot <- center - height/2
-    top <- center + height/2
+    else {
+      stop("you need to provide 'width' and 'height' OR 'left' and 'bot' arguments when using 'center' argument")
+    }
   }
   else {
     
@@ -1014,14 +1027,21 @@ st_box <- function(left, right, top, bot, center, width, height) {
       stop("you need to provide 'width' and 'height' OR 'top' arguments when using 'left' and bot argument")
       }
     if (missing(top) | missing(right)) {
-      right <- left + width
-      top <- bot + height
+      right <- left +  width/2
+      top <- bot +  height/2
     }
   }
 
   points <- matrix(c(right, top, left, top, left, bot, right, bot, right, top), ncol = 2, byrow = TRUE)
-  return(st_polygon(list(points)))
+  ox <- (right + left)/2
+  oy <- (top + bot)/2
+  points <- matrix(c(
+    cos(-angle) * (points[,1] - ox)  - sin(-angle) * (points[,2] - oy) + ox,
+    sin(-angle) * (points[,1] - ox)  + cos(-angle) * (points[,2] - oy) + oy), ncol = 2)
+  box <- st_polygon(list(points))
+  return(box)
 }
+
 
 # triangles <- st_triangulate_circle(center, 100, bins = 360)
 # rings <- st_concentrics_rings(100, 20, center = center)
@@ -1040,3 +1060,261 @@ st_box <- function(left, right, top, bot, center, width, height) {
 #         fill = value)) +
 #     scale_fill_viridis_c() +
 #     coord_polar()
+
+
+center_and_orient_mesh <- function(mesh, angle = 0, around, offset) {
+  if ("sfc" %in% class(mesh)) {
+    is_sfc <- TRUE
+    mesh <- mesh[[1]]}
+  if (missing(around)) {around <-  sf::st_centroid(mesh)}
+  if (missing(offset)) {offset <-  sf::st_centroid(mesh)}
+  if ("sfc" %in% class(around)) {around <- around[[1]]}
+  if ("sfc" %in% class(offset)) {offset <- offset[[1]]}
+  out <- st_rotate_around(mesh, angle, around) - offset
+  if (is_sfc) {out <- st_sfc(out)}
+  return(out)
+}
+
+
+morpho_out |>
+  rowwise() |> 
+  mutate(bb =list(st_minimum_bounding_box(mesh_cont))) |> 
+  unnest_wider(bb) |> 
+  unnest(polygon) |>
+  mutate(polygon = st_sfc(polygon)) |>
+  rowwise() |> 
+  mutate(
+    angle = angle * (2*pi/360), 
+    mesh_cent = center_and_orient_mesh(mesh_cont, angle)) |>
+  st_as_sf() -> morpho
+
+
+
+mj_out  |>
+  rowwise() |> 
+  mutate(bb =list(st_minimum_bounding_box(mesh))) |> 
+  unnest_wider(bb) |> 
+  unnest(polygon) |>
+  rowwise() |> 
+  mutate(
+    angle = angle * (2*pi/360), 
+    mesh_cent = st_sfc(center_and_orient_mesh(mesh, angle,offset = st_centroid(polygon), around = st_centroid(polygon)))) |>
+  st_as_sf() -> mj
+
+
+StatStackMesh <- ggproto("StatStackMesh", Stat,
+  compute_group = function(data, scales) {
+  print(tibble(data))
+  data |>
+    rowwise() |> 
+    mutate(bb =list(st_minimum_bounding_box(geometry))) |> 
+    unnest_wider(bb) |> 
+    unnest(polygon) |>
+    rowwise() |> 
+    mutate(
+    angle = angle * (2*pi/360), 
+    geometry = st_sfc(center_and_orient_mesh(geometry, angle, offset = st_centroid(geometry), around = st_centroid(geometry)))) |>
+    select(-polygon) -> data
+    print(tibble(data))
+    data
+  },
+  required_aes = c("geometry")
+)
+
+geom_stackmesh <- function(mapping = NULL, data = NULL, stat = "sf",
+                       position = "identity", na.rm = FALSE, show.legend = NA, 
+                       inherit.aes = TRUE, ...) {
+  c(
+  layer_sf(
+    stat = StatStackMesh, data = data, mapping = mapping, geom = geom, 
+    position = position, show.legend = show.legend, inherit.aes = inherit.aes,
+    params = list(na.rm = na.rm, ...)
+  ),
+  coord_sf(default = TRUE)
+  )
+}
+
+StatSfStack <- ggproto("StatSfStack", Stat,
+  compute_layer = function(self, data, params, layout) {
+    # add coord to the params, so it can be forwarded to compute_group()
+    params$coord <- layout$coord
+    ggproto_parent(Stat, self)$compute_layer(data, params, layout)
+  },
+
+  compute_group = function(data, scales, coord) {
+    data |> 
+      rowwise() |> 
+      mutate(bb = list(st_minimum_bounding_box(geometry))) |> 
+      unnest_wider(bb) |> 
+      select(-polygon) |>
+      rowwise() |> 
+      mutate(
+        angle = angle * (2*pi/360), 
+        geometry = st_sfc(center_and_orient_mesh(
+          geometry,
+          angle, 
+          offset = st_centroid(geometry),
+          around = st_centroid(geometry)))) -> data
+    geometry_data <- data[[ geom_column(data) ]]
+
+    geometry_crs <- sf::st_crs(geometry_data)
+
+    bbox <- sf::st_bbox(geometry_data)
+
+    if (inherits(coord, "CoordSf")) {
+      # if the coord derives from CoordSf, then it
+      # needs to know about bounding boxes of geometry data
+      coord$record_bbox(
+        xmin = bbox[["xmin"]], xmax = bbox[["xmax"]],
+        ymin = bbox[["ymin"]], ymax = bbox[["ymax"]]
+      )
+
+      # to represent the location of the geometry in default coordinates,
+      # we take the mid-point along each side of the bounding box and
+      # backtransform
+      bbox_trans <- sf_transform_xy(
+        list(
+          x = c(rep(0.5*(bbox[["xmin"]] + bbox[["xmax"]]), 2), bbox[["xmin"]], bbox[["xmax"]]),
+          y = c(bbox[["ymin"]], bbox[["ymax"]], rep(0.5*(bbox[["ymin"]] + bbox[["ymax"]]), 2))
+        ),
+        coord$get_default_crs(),
+        geometry_crs
+      )
+
+      # record as xmin, xmax, ymin, ymax so regular scales
+      # have some indication of where shapes lie
+      data$xmin <- min(bbox_trans$x)
+      data$xmax <- max(bbox_trans$x)
+      data$ymin <- min(bbox_trans$y)
+      data$ymax <- max(bbox_trans$y)
+    } else {
+      # for all other coords, we record the full extent of the
+      # geometry object
+      data$xmin <- bbox[["xmin"]]
+      data$xmax <- bbox[["xmax"]]
+      data$ymin <- bbox[["ymin"]]
+      data$ymax <- bbox[["ymax"]]
+    }
+
+    data
+  }, 
+
+  required_aes = c("geometry")
+)
+
+stat_sf_stack <- function(mapping = NULL, data = NULL, geom = "rect",
+                    position = "identity", na.rm = FALSE, show.legend = NA,
+                    inherit.aes = TRUE, ...) {
+  layer_sf(
+    stat = StatSfStack,
+    data = data,
+    mapping = mapping,
+    geom = geom,
+    position = position,
+    show.legend = show.legend,
+    inherit.aes = inherit.aes,
+    params = list(
+      na.rm = na.rm,
+      ...
+    )
+  )
+}
+
+
+geom_sf_stack <- function(mapping = aes(), data = NULL, stat = "sf_stack",
+                    position = "identity", na.rm = FALSE, show.legend = NA,
+                    inherit.aes = TRUE, ...) {
+  c(
+    layer_sf(
+      geom = GeomSf,
+      data = data,
+      mapping = mapping,
+      stat = stat,
+      position = position,
+      show.legend = show.legend,
+      inherit.aes = inherit.aes,
+      params = list(
+        na.rm = na.rm,
+        ...
+      )
+    ),
+    coord_sf(default = TRUE)
+  )
+}
+
+geom_column <- function(data) {
+  w <- which(vapply(data, inherits, TRUE, what = "sfc"))
+  if (length(w) == 0) {
+    "geometry" # avoids breaks when objects without geometry list-column are examined
+  } else {
+    # this may not be best in case more than one geometry list-column is present:
+    if (length(w) > 1)
+      warn("more than one geometry column present: taking the first")
+    w[[1]]
+  }
+}
+
+morpho_out |>
+  rowwise() |> 
+  mutate(bb = list(st_minimum_bounding_box(mesh_cont))) |> 
+  unnest_wider(bb) |> 
+  rowwise() |> 
+  mutate(
+  angle = angle * (2*pi/360), 
+  centroid =  st_centroid(mesh_cont),
+  mesh_cent = st_sfc(center_and_orient_mesh(mesh_cont, angle, offset = centroid, around = centroid))) -> morpho_cent
+
+
+st_join(st_sf(morpho_cent,  sf_column_name = "mesh_cont"), tmp_id, left = FALSE) |> as_tibble() -> inside
+inside |> inner_join(tmp_id, by = c("id"= "id")) -> full_data
+
+
+
+full_data |> 
+    group_by(cellID) |>
+    summarize(
+      pts = st_sfc(st_multipoint(matrix(unlist(geometry), ncol = 2, byrow = TRUE))),
+      order = list(id),
+      value = list(lyr.1.y)) |> inner_join(morpho_cent, by = c("cellID" = "cellID")) -> out
+    
+out |> 
+  select(cellID, pts, order, value, mesh_cent, angle, centroid) |>
+  rowwise() |>
+  mutate(
+    pts_cent = st_rotate_around(pts, angle, centroid) - centroid
+  ) -> out2
+  
+out2 |> mutate(pts_cent = cbind(pts_cent))|>
+      unnest_longer(c(pts_cent, value)) |>
+      rowwise() |>
+      mutate(pts_cent = list(st_point(c(pts_cent))),
+             box = st_sfc(st_box(center = pts_cent, width = 1, height = 1, angle = angle))) -> out3
+  
+out3 |> ggplot() +
+  geom_sf(aes(geometry = box, fill = value ))
+
+    
+
+full_data |> 
+    group_by(cellID) |> 
+    mutate(
+      center = sf::st_sfc(st_rotate_around(geometry, angle, centroid) - centroid)) -> data_cent
+
+data_cent |> mutate(box = sf::st_sfc(st_box(center = center, width = 1, height = 1))) -> data_cent
+
+data_cent |> mutate(box = sf::st_sfc(st_rotate_around(box, angle, st_centroid(box)))) -> data_cent
+
+
+
+data_cent |>
+  ggplot() +
+    geom_tile(
+      aes(
+        x = x,
+        y = y,
+        width = 1,
+        height = 1,
+        fill = lyr.1.y),
+      alpha = 0.3) +
+    scale_fill_viridis_c() 
+

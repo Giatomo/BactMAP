@@ -48,3 +48,11 @@ read_morphometrics <- function(morphometrics_matfile){
   cell_list <- extract_morphometrics(morphometrics_list)
   return(cell_list)
 }
+
+read_microbeJ_mesh <- function(microbeJ_csv){
+  microbeJ_df <- read_csv(microbeJ_csv)
+  microbeJ_df |> 
+    extract_microbeJ_mesh() -> mesh
+  return(mesh)
+}
+

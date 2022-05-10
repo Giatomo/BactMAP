@@ -210,9 +210,7 @@ polygonize_and_get_centroids <- function(meshlist, x, y, .group) {
 #   return(cell_list)
 # }
 
-center_and_orient_mesh <- function(mesh, angle = 0, around = sf::st_centroid(mesh), offset = sf::st_point(c(0,0))) {
-  return(st_rotate_around(mesh, angle, around) - offset)
-}
+
 
 center_and_rotate_meshes <- function(meshlist, x, y, .group) {
   meshlist |>
@@ -271,3 +269,17 @@ trim_orphan <- function(datasegger) {
 
   return(datasegger)
 }
+
+
+
+extract_microbeJ_mesh <- function(microbeJ_df) {
+  microbeJ_df |>
+  rename(name = NAME, index = INDEX, frame = POSITION, x = X, y = Y) |>
+  group_by(name, frame) |>
+  arrange(index) |>
+  summarise(mesh = list(st_polygon_autoclose(x, y))) |>
+  st_sf() -> mesh
+  return(mesh)
+}
+
+
